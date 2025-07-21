@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BulletHell-Web</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="ui">
+        <div id="hpBarContainer">
+            <label>HP:</label><div id="hpBar"></div>
+        </div>
+        <div id="scoreContainer">
+            <label>점수:</label><span id="score">0</span>
+        </div>
+        <button id="submitScore">점수 제출</button>
+        <div id="leaderboard">
+            <h3>리더보드</h3>
+            <ol id="boardList"></ol>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
