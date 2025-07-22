@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BulletHell 리더보드</title>
+  <style>
+    body { margin:0; padding:20px; font-family:sans-serif; background:#111; color:#eee; }
+    h1 { text-align:center; }
+    ol { max-width:400px; margin:20px auto; padding-left:20px; }
+    li { margin:8px 0; }
+  </style>
+</head>
+<body>
+  <h1>BulletHell 리더보드</h1>
+  <ol id="boardList"><li>로딩 중…</li></ol>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+    const SUPABASE_URL      = 'https://racbwrlvquamhqbqzsix.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhY2J3cmx2cXVhbWhxYnF6c2l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxMTM0MzMsImV4cCI6MjA2ODY4OTQzM30.pT24RRHE4oX9__fdldUT6Cic5P4MgGFk1HiIM46gXGE';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function loadLeaderboard() {
+      const { data, error } = await supabase
+        .from('scores')
+        .select('userId,score,created_at')
+        .order('score', { ascending: false });
+
+      const list = document.getElementById('boardList');
+      if (error) {
+        list.innerHTML = `<li>불러오기 실패: ${error.message}</li>`;
+        return;
+      }
+      if (!data.length) {
+        list.innerHTML = `<li>아직 기록이 없습니다.</li>`;
+        return;
+      }
+
+      list.innerHTML = data
+        .map((e,i) =>
+          `<li>${i+1}위 — ${e.userId}: ${e.score}점 <small>(${new Date(e.created_at).toLocaleString()})</small></li>`
+        )
+        .join('');
+    }
+
+    loadLeaderboard();
+  </script>
+</body>
+</html>
