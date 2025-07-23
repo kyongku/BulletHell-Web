@@ -139,8 +139,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // 점수 제출 & 조회
   async function handleSubmit(){
-    if(!gameOver) return;
-    const name=prompt('이름 입력'); if(!name) return;
+    // 1) 게임 오버 상태가 아니면 리턴
+  if (!gameOver) return;
+
+  // 2) 한글 1~4자 이름 입력
+  let name = prompt('이름 입력 (한글 1~4자)');
+  if (!name) return;
+
+  // 3) 한글 1~4자만 허용
+  const re = /^[가-힣]{1,4}$/;
+  if (!re.test(name)){
+    alert('이름은 한글 1~4자만 가능합니다.');
+    return;
+  }
     const {error:ie}=await supabase.from('scores').insert([{userId:name,score}]);
     if(ie){ alert('저장 실패:'+ie.message); return; }
     const {data, error:fe}=await supabase.from('scores').select('*').order('score',{ascending:false});
