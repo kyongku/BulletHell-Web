@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
           this.y=Math.random()*canvas.height;
         }
         const dx=player.x-this.x, dy=player.y-this.y;
-        const L=Math.hypot(dx,dy), sp=3+score/2000;
+        const L=Math.hypot(dx,dy), sp=3+score/4000;
         this.vx=dx/L*sp; this.vy=dy/L*sp;
         this.r=5; this.color='#f00'; this.dmg=10;
       } else {
@@ -192,25 +192,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     // 보스 스케줄
     if(nextBossIdx<bossSchedule.length && score>=bossSchedule[nextBossIdx]){
-      warningDiv.style.display='block';
-      setTimeout(()=>{
-        warningDiv.style.display='none';
-        bossActive=true; bossTimer=0;
-      },1000);
+      warningDiv.style.display = 'block';
+      setTimeout(() => {
+        warningDiv.style.display = 'none';
+        bossActive = true;
+        bossTimer = 0;
+      }, 3000);                    // ← 경고 3초로 늘림
       nextBossIdx++;
     }
 
     // 보스 동작
     if(bossActive){
-      bossTimer+=16;
-      if(bossTimer<bossDuration){
-        // 보스 탄환 초당 2발
-        if(tick%500<16){
+      bossTimer += 16;
+      if (bossTimer < 15000) {      // ← 지속시간 15초
+        // 보스 패턴 중간 전환 (5초마다)
+        if (bossTimer % 5000 < 16) {
+          bossPatternIdx = (bossPatternIdx + 1) % bossPatterns.length;
+        }
+
+        // 보스 탄환 초당 2발, 간격을 더 짧게
+        if (tick % 400 < 16) {
           bullets.push(new Bullet(true));
           bullets.push(new Bullet(true));
         }
       } else {
-        bossActive=false;
+        bossActive = false;
+        document.getElementById('bossHpBarContainer').style.display = 'none';
       }
     }
 
