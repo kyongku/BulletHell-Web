@@ -1,17 +1,33 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BulletHell 리더보드</title>
   <style>
     body { margin:0; padding:20px; font-family:sans-serif; background:#111; color:#eee; }
     h1 { text-align:center; }
+    .btn-back {
+      display:block;
+      margin:0 auto 20px;
+      padding:10px 20px;
+      background:#444;
+      color:#fff;
+      border:none;
+      cursor:pointer;
+      font-size:1rem;
+      border-radius:4px;
+    }
     ol { max-width:400px; margin:20px auto; padding-left:20px; }
     li { margin:8px 0; }
   </style>
 </head>
 <body>
+  <!-- 메인으로 돌아가기 -->
+  <button class="btn-back" onclick="window.location.href='../'">
+    ← 메인 화면으로
+  </button>
+
   <h1>BulletHell 리더보드</h1>
   <ol id="boardList"><li>로딩 중…</li></ol>
 
@@ -37,7 +53,8 @@
         list.innerHTML = `<li>아직 기록이 없습니다.</li>`;
         return;
       }
-        // 중복 닉네임 제거: 최고점만 남기기
+
+      // 중복 닉네임 제거 (최고점만)
       const seen = new Set();
       const filtered = data.filter(({ userId }) => {
         if (seen.has(userId)) return false;
