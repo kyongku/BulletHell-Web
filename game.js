@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     let name = localStorage.getItem('nickname');
     if (!name) {
     // 없으면 한글 1~4자 입력받기
-      name = prompt('이름 입력 (한글 1~4자)');
+      name = prompt('이름 입력 (한글 1~4자), 이름은 한번 저장되면 바꿀수 없으니 조심 하세요!');
       if (!name) return;
       const re = /^[가-힣]{1,4}$/;
       if (!re.test(name)){
