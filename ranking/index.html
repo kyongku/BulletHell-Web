@@ -37,8 +37,15 @@
         list.innerHTML = `<li>아직 기록이 없습니다.</li>`;
         return;
       }
+        // 중복 닉네임 제거: 최고점만 남기기
+      const seen = new Set();
+      const filtered = data.filter(({ userId }) => {
+        if (seen.has(userId)) return false;
+        seen.add(userId);
+        return true;
+      });
 
-      list.innerHTML = data
+      list.innerHTML = filtered
         .map((e,i) =>
           `<li>${i+1}위 — ${e.userId}: ${e.score}점 <small>(${new Date(e.created_at).toLocaleString()})</small></li>`
         )
