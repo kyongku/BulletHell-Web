@@ -142,15 +142,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // 1) 게임 오버 상태가 아니면 리턴
     if (!gameOver) return;
 
-  // 2) 한글 1~4자 이름 입력
-    let name = prompt('이름 입력 (한글 1~4자)');
-    if (!name) return;
-
-  // 3) 한글 1~4자만 허용
-    const re = /^[가-힣]{1,4}$/;
-    if (!re.test(name)){
-      alert('이름은 한글 1~4자만 가능합니다.');
-      return;
+    // 1) 로컬스토리지에 저장된 닉네임이 있는지 확인
+    let name = localStorage.getItem('nickname');
+    if (!name) {
+    // 없으면 한글 1~4자 입력받기
+      name = prompt('이름 입력 (한글 1~4자)');
+      if (!name) return;
+      const re = /^[가-힣]{1,4}$/;
+      if (!re.test(name)){
+        alert('이름은 한글 1~4자만 가능합니다.');
+        return;
+      }
+    // 유효할 때 로컬스토리지에 저장
+      localStorage.setItem('nickname', name);
     }
     const {error:ie}=await supabase.from('scores').insert([{userId:name,score}]);
     if(ie){ alert('저장 실패:'+ie.message); return; }
