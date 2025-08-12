@@ -204,6 +204,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
 
     // 보스 동작
+    /*
     if(bossActive){
       bossTimer += 16;
       if (bossTimer < 15000) {      // ← 지속시간 15초
@@ -222,6 +223,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         document.getElementById('bossHpBarContainer').style.display = 'none';
       }
     }
+    */
 
     bullets.forEach(b=>b.update());
     bullets=bullets.filter(b=>b.x>=-20&&b.x<=canvas.width+20&&b.y>=-20&&b.y<=canvas.height+20);
