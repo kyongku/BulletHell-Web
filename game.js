@@ -333,7 +333,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const dx=hpPack.x-player.x, dy=hpPack.y-player.y;
       if(Math.hypot(dx,dy)<hpPack.r+player.r){
         const missing=player.maxHp-player.hp;
-        const healAmt=missing*0.05 + (player.maxHp/15)*0.5;
+        const healAmt=missing*0.1 + (player.maxHp/15);
         player.hp=Math.min(player.maxHp, player.hp+healAmt);
         healthPacks.splice(i,1);
       }
