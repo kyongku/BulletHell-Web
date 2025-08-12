@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let bossSchedule = [3000,6000,9000], nextBossIdx=0;
   let bossActive=false, bossTimer=0, bossDuration=1500;
   let lastHealthThreshold=0, keys={};
+  let bossPatternIdx = 0;
+  const bossPatterns = ['circle', 'spiral', 'burst'];
 
   // 스킨 & 최고점
   const skins = [
