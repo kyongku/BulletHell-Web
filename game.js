@@ -717,19 +717,46 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startFireHazards() {
-    fireZones = [];
-    const candidates = [
-      { x: 140, y: 110, w: 250, h: 150 },
-      { x: canvas.width - 390, y: 110, w: 250, h: 150 },
-      { x: 180, y: canvas.height - 250, w: 250, h: 150 },
-      { x: canvas.width - 430, y: canvas.height - 250, w: 250, h: 150 },
-      { x: canvas.width / 2 - 140, y: canvas.height / 2 - 90, w: 280, h: 180 },
-    ];
-    for (let i = 0; i < 2; i += 1) {
-      const zone = candidates.splice((Math.random() * candidates.length) | 0, 1)[0];
-      fireZones.push({ ...zone, life: 4500, maxLife: 4500, tickMs: 0 });
+  fireZones = [];
+
+  const cols = 2;
+  const rows = 2;
+
+  const cellW = canvas.width / cols;
+  const cellH = canvas.height / rows;
+
+  // 장판이 칸 안에서 너무 꽉 차지 않게 여백 둠
+  const marginX = cellW * 0.12;
+  const marginY = cellH * 0.12;
+
+  // 장판 크기: 각 칸의 일정 비율
+  const zoneW = cellW - marginX * 2;
+  const zoneH = cellH - marginY * 2;
+
+  const candidates = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      candidates.push({
+        x: col * cellW + marginX,
+        y: row * cellH + marginY,
+        w: zoneW,
+        h: zoneH,
+      });
     }
   }
+
+  for (let i = 0; i < 2; i += 1) {
+    const idx = (Math.random() * candidates.length) | 0;
+    const zone = candidates.splice(idx, 1)[0];
+    fireZones.push({
+      ...zone,
+      life: 4500,
+      maxLife: 4500,
+      tickMs: 0,
+    });
+  }
+}
 
   function updateFireHazards(dt) {
     for (const zone of fireZones) {
