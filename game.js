@@ -1,8 +1,27 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+  serverTimestamp,
+} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
-const SUPABASE_URL = 'https://racbwrlvquamhqbqzsix.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3N1cGFiYXNlLmNvbS9hdXRoL3YxIiwicmVmIjoicmFjYndybHZxdWFtaHFicXpzaXgiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MzExMzQzMywiZXhwIjoyMDY4Njg5NDMzfQ.pT24RRHE4oX9__fdldUT6Cic5P4MgGFk1HiIM46gXGE';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const firebaseConfig = {
+  apiKey: 'AIzaSyA65hHD3pzh8Jv91xBWxMOK_FG9j8vNL2o',
+  authDomain: 'core-tempest-11588.firebaseapp.com',
+  projectId: 'core-tempest-11588',
+  storageBucket: 'core-tempest-11588.firebasestorage.app',
+  messagingSenderId: '343743820806',
+  appId: '1:343743820806:web:41391a57902093fea57f87',
+  measurementId: 'G-4P8SZVSN3Q',
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 document.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
@@ -817,16 +836,34 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       localStorage.setItem('nickname', name);
     }
-    const { error: ie } = await supabase.from('scores').insert([{ userId: name, score: score | 0 }]);
-    if (ie) {
-      alert(`저장 실패: ${ie.message}`);
-      return;
+
+    try {
+      await addDoc(collection(db, 'scores'), {
+        userId: name,
+        score: score | 0,
+        createdAt: serverTimestamp(),
+      });
+
+      const snap = await getDocs(query(collection(db, 'scores'), orderBy('score', 'desc'), limit(100)));
+      const entries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const seen = new Set();
+      const filtered = [];
+      for (const entry of entries) {
+        if (seen.has(entry.userId)) continue;
+        seen.add(entry.userId);
+        filtered.push(entry);
+        if (filtered.length >= 10) break;
+      }
+
+      if (!boardList) return;
+      boardList.innerHTML = filtered.length
+        ? filtered.map((e, i) => `<li>${i + 1}위 — ${e.userId}: ${e.score}점</li>`).join('')
+        : '<li>아직 기록이 없습니다.</li>';
+      const leaderboardWrap = $('leaderboard');
+      if (leaderboardWrap) leaderboardWrap.style.display = 'block';
+    } catch (err) {
+      alert(`저장 실패: ${err.message || err}`);
     }
-    const { data, error: fe } = await supabase.from('scores').select('*').order('score', { ascending: false });
-    if (!boardList) return;
-    boardList.innerHTML = fe
-      ? `<li>불러오기 실패:${fe.message}</li>`
-      : data.map((e, i) => `<li>${i + 1}위 — ${e.userId}: ${e.score}점</li>`).join('');
   }
 
   function update(dt) {
