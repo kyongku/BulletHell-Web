@@ -7,29 +7,32 @@
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <!-- 메인 메뉴 -->
   <div id="mainMenu">
     <h1>BulletHell-Web</h1>
     <button id="btnStart">게임 시작</button>
+
     <div id="skinShop">
       <h2>스킨 상점</h2>
       <div id="skins"></div>
     </div>
+
+    <div id="skillLoadout">
+      <h2>우클릭 스킬</h2>
+      <div id="skills"></div>
+    </div>
+
     <div id="highScore">
       최고 점수: <span id="best">0</span>
     </div>
     <button id="btnLeaderboard">리더보드</button>
   </div>
 
-  <!-- 경고 메시지 -->
   <div id="warning" style="display:none">
     ⚠️ WARNING: 보스 곧 등장! ⚠️
   </div>
 
-  <!-- 게임 캔버스 -->
-  <canvas id="gameCanvas" width="800" height="600" style="display:none"></canvas>
+  <canvas id="gameCanvas" width="1200" height="720" style="display:none"></canvas>
 
-  <!-- HUD -->
   <div id="ui" style="display:none">
     <div id="hpBarContainer">
       <label>HP:</label>
@@ -38,14 +41,12 @@
     <div id="scoreContainer">
       <label>점수:</label><span id="score">0</span>
     </div>
-    <!-- 보스 UI -->
     <div id="bossUi" style="display:none">
       <label>Boss HP:</label>
       <div id="bossHpBar"><div></div></div>
     </div>
   </div>
 
-  <!-- 게임오버 & 리더보드 -->
   <div id="gameOverScreen" style="display:none">
     <h2>게임 오버!</h2>
     <div>최종 점수: <span id="finalScore">0</span></div>
@@ -57,15 +58,10 @@
     </div>
   </div>
 
-  <!-- 스크립트 불러오기 & 버튼 이벤트 -->
   <script type="module">
-    // 리더보드 버튼 클릭 시 랭킹 페이지로 이동
-    document.getElementById('btnLeaderboard')
-      .addEventListener('click', () => {
-        window.location.href = './ranking/';
-      });
-
-    // 기존 game.js 모듈 로드
+    document.getElementById('btnLeaderboard').addEventListener('click', () => {
+      window.location.href = './ranking/';
+    });
     import './game.js';
   </script>
 </body>
