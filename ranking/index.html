@@ -2,67 +2,260 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BulletHell-Web</title>
-  <link rel="stylesheet" href="style.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Core Tempest Leaderboard</title>
+  <style>
+    :root {
+      --bg: #07090d;
+      --panel: #11161f;
+      --panel-2: #171e29;
+      --line: #2a3444;
+      --text: #eef3ff;
+      --muted: #9fb0c9;
+      --accent: #7fd3ff;
+      --gold: #f7c948;
+      --silver: #cfd6e6;
+      --bronze: #d28b5f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #111827 0%, var(--bg) 45%, #050608 100%);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 16px 48px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 36px;
+      letter-spacing: .3px;
+    }
+    .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button, a.btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    button:hover, a.btn:hover { border-color: var(--accent); }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 14px 36px rgba(0,0,0,.28);
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+    }
+    .status { color: var(--muted); font-size: 14px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      text-align: left;
+      font-size: 15px;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      background: rgba(255,255,255,.02);
+    }
+    td.rank {
+      width: 84px;
+      font-weight: 700;
+    }
+    td.score {
+      width: 140px;
+      font-weight: 700;
+    }
+    tr:nth-child(1) td.rank { color: var(--gold); }
+    tr:nth-child(2) td.rank { color: var(--silver); }
+    tr:nth-child(3) td.rank { color: var(--bronze); }
+    .empty, .error {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .error { color: #ff9e9e; }
+    .foot {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    @media (max-width: 640px) {
+      h1 { font-size: 28px; }
+      th:nth-child(4), td:nth-child(4) { display: none; }
+      td.rank { width: 60px; }
+      td.score { width: 110px; }
+    }
+  </style>
 </head>
 <body>
-  <div id="mainMenu">
-    <h1>BulletHell-Web</h1>
-    <button id="btnStart">게임 시작</button>
-
-    <div id="skinShop">
-      <h2>스킨 상점</h2>
-      <div id="skins"></div>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>리더보드</h1>
+        <div class="sub">Core Tempest / BulletHell-Web 상위 점수</div>
+      </div>
+      <div class="actions">
+        <button id="btnRefresh" type="button">새로고침</button>
+        <a class="btn" href="../">게임으로 돌아가기</a>
+      </div>
     </div>
 
-    <div id="skillLoadout">
-      <h2>우클릭 스킬</h2>
-      <div id="skills"></div>
+    <div class="card">
+      <div class="card-head">
+        <div>상위 기록</div>
+        <div id="status" class="status">불러오는 중...</div>
+      </div>
+      <div id="tableWrap">
+        <div class="empty">불러오는 중...</div>
+      </div>
     </div>
 
-    <div id="highScore">
-      최고 점수: <span id="best">0</span>
-    </div>
-    <button id="btnLeaderboard">리더보드</button>
-  </div>
-
-  <div id="warning" style="display:none">
-    ⚠️ WARNING: 보스 곧 등장! ⚠️
-  </div>
-
-  <canvas id="gameCanvas" width="1200" height="720" style="display:none"></canvas>
-
-  <div id="ui" style="display:none">
-    <div id="hpBarContainer">
-      <label>HP:</label>
-      <div id="hpBar"><div></div></div>
-    </div>
-    <div id="scoreContainer">
-      <label>점수:</label><span id="score">0</span>
-    </div>
-    <div id="bossUi" style="display:none">
-      <label>Boss HP:</label>
-      <div id="bossHpBar"><div></div></div>
-    </div>
-  </div>
-
-  <div id="gameOverScreen" style="display:none">
-    <h2>게임 오버!</h2>
-    <div>최종 점수: <span id="finalScore">0</span></div>
-    <button id="submitScore">점수 제출</button>
-    <button id="btnRetry">다시하기</button>
-    <div id="leaderboard" style="display:none">
-      <h3>리더보드</h3>
-      <ol id="boardList"></ol>
+    <div class="foot">
+      이름 필드는 <code>name</code> 또는 <code>userId</code>를 읽는다. 저장 시각이 없으면 날짜 칸은 비운다.
     </div>
   </div>
 
   <script type="module">
-    document.getElementById('btnLeaderboard').addEventListener('click', () => {
-      window.location.href = './ranking/';
-    });
-    import './game.js';
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
+    import { getFirestore, collection, getDocs, orderBy, query, limit } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: 'AIzaSyA65hHD3pzh8Jv91xBWxMOK_FG9j8vNL2o',
+      authDomain: 'core-tempest-11588.firebaseapp.com',
+      projectId: 'core-tempest-11588',
+      storageBucket: 'core-tempest-11588.firebasestorage.app',
+      messagingSenderId: '343743820806',
+      appId: '1:343743820806:web:41391a57902093fea57f87',
+      measurementId: 'G-4P8SZVSN3Q'
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const statusEl = document.getElementById('status');
+    const tableWrap = document.getElementById('tableWrap');
+    document.getElementById('btnRefresh').addEventListener('click', loadLeaderboard);
+
+    function formatDate(value) {
+      if (!value) return '-';
+      try {
+        const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+        return date.toLocaleString('ko-KR', {
+          month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return '-';
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function loadLeaderboard() {
+      statusEl.textContent = '불러오는 중...';
+      tableWrap.innerHTML = '<div class="empty">불러오는 중...</div>';
+      try {
+        const q = query(collection(db, 'scores'), orderBy('score', 'desc'), limit(50));
+        const snap = await getDocs(q);
+        const rows = [];
+        snap.forEach((doc) => {
+          const data = doc.data() || {};
+          rows.push({
+            name: data.name || data.userId || '익명',
+            score: Number(data.score || 0),
+            createdAt: data.createdAt || null,
+          });
+        });
+
+        if (!rows.length) {
+          tableWrap.innerHTML = '<div class="empty">아직 기록이 없다.</div>';
+          statusEl.textContent = '기록 0개';
+          return;
+        }
+
+        const tbody = rows.map((row, idx) => {
+          return `
+            <tr>
+              <td class="rank">#${idx + 1}</td>
+              <td>${escapeHtml(row.name)}</td>
+              <td class="score">${row.score.toLocaleString('ko-KR')}</td>
+              <td>${formatDate(row.createdAt)}</td>
+            </tr>
+          `;
+        }).join('');
+
+        tableWrap.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>이름</th>
+                <th>점수</th>
+                <th>기록 시각</th>
+              </tr>
+            </thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        `;
+        statusEl.textContent = `기록 ${rows.length}개`;
+      } catch (err) {
+        console.error(err);
+        tableWrap.innerHTML = `<div class="error">리더보드를 불러오지 못했다.<br>${escapeHtml(err.message || err)}</div>`;
+        statusEl.textContent = '오류';
+      }
+    }
+
+    loadLeaderboard();
   </script>
 </body>
 </html>
