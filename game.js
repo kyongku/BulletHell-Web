@@ -1,27 +1,8 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  orderBy,
-  limit,
-  serverTimestamp,
-} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyA65hHD3pzh8Jv91xBWxMOK_FG9j8vNL2o',
-  authDomain: 'core-tempest-11588.firebaseapp.com',
-  projectId: 'core-tempest-11588',
-  storageBucket: 'core-tempest-11588.firebasestorage.app',
-  messagingSenderId: '343743820806',
-  appId: '1:343743820806:web:41391a57902093fea57f87',
-  measurementId: 'G-4P8SZVSN3Q',
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const SUPABASE_URL = 'https://racbwrlvquamhqbqzsix.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3N1cGFiYXNlLmNvbS9hdXRoL3YxIiwicmVmIjoicmFjYndybHZxdWFtaHFicXpzaXgiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MzExMzQzMywiZXhwIjoyMDY4Njg5NDMzfQ.pT24RRHE4oX9__fdldUT6Cic5P4MgGFk1HiIM46gXGE';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 document.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
@@ -44,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const bossHpFill = document.querySelector('#bossHpBar>div');
   const hpBarDiv = document.querySelector('#hpBar>div');
   const hpBarContainer = $('hpBarContainer');
+  const uiRoot = $('ui');
 
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -62,6 +44,23 @@ document.addEventListener('DOMContentLoaded', () => {
     pointerEvents: 'none',
   });
   if (hpBarContainer) hpBarContainer.appendChild(hpText);
+
+  const skillHud = document.createElement('div');
+  skillHud.id = 'skillHud';
+  Object.assign(skillHud.style, {
+    marginTop: '10px',
+    display: 'inline-block',
+    padding: '8px 12px',
+    border: '1.5px solid #7fd3ff',
+    background: 'rgba(10, 14, 20, 0.88)',
+    color: '#dff6ff',
+    fontSize: '16px',
+    fontWeight: '700',
+    lineHeight: '1.2',
+    minWidth: '220px',
+    boxShadow: '0 0 10px rgba(127, 211, 255, 0.18)',
+  });
+  if (uiRoot) uiRoot.appendChild(skillHud);
 
   const FRAME_REF = 16.6667;
   const SCORE_PER_SEC = 60;
@@ -644,6 +643,16 @@ document.addEventListener('DOMContentLoaded', () => {
     bossHpFill.style.width = `${240 * Math.max(0, Math.min(1, boss.hp / boss.maxHp))}px`;
   }
 
+  function updateSkillHud() {
+    if (!skillHud) return;
+    const skill = getSelectedSkill();
+    const cooldownSec = Math.max(0, rightSkillCooldownMs) / 1000;
+    const ready = rightSkillCooldownMs <= 0;
+    skillHud.textContent = `우클릭: ${skill.name} ${ready ? '(준비)' : `(${cooldownSec.toFixed(1)}s)`}`;
+    skillHud.style.borderColor = ready ? '#7fd3ff' : '#ffcf66';
+    skillHud.style.color = ready ? '#dff6ff' : '#ffe8a3';
+  }
+
   function spawnHitEffect(x, y, color = '#afffaf') {
     const lifespan = 150;
     effects.push({ type: 'ring', x, y, color, life: lifespan, maxLife: lifespan, radius: 12 });
@@ -808,6 +817,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (submitBtn) submitBtn.disabled = true;
     updateHpBar();
     if (scoreSpan) scoreSpan.textContent = '0';
+    updateSkillHud();
     if (bossHpFill) bossHpFill.style.width = '240px';
     lastTime = performance.now();
   }
@@ -836,34 +846,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       localStorage.setItem('nickname', name);
     }
-
-    try {
-      await addDoc(collection(db, 'scores'), {
-        userId: name,
-        score: score | 0,
-        createdAt: serverTimestamp(),
-      });
-
-      const snap = await getDocs(query(collection(db, 'scores'), orderBy('score', 'desc'), limit(100)));
-      const entries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const seen = new Set();
-      const filtered = [];
-      for (const entry of entries) {
-        if (seen.has(entry.userId)) continue;
-        seen.add(entry.userId);
-        filtered.push(entry);
-        if (filtered.length >= 10) break;
-      }
-
-      if (!boardList) return;
-      boardList.innerHTML = filtered.length
-        ? filtered.map((e, i) => `<li>${i + 1}위 — ${e.userId}: ${e.score}점</li>`).join('')
-        : '<li>아직 기록이 없습니다.</li>';
-      const leaderboardWrap = $('leaderboard');
-      if (leaderboardWrap) leaderboardWrap.style.display = 'block';
-    } catch (err) {
-      alert(`저장 실패: ${err.message || err}`);
+    const { error: ie } = await supabase.from('scores').insert([{ userId: name, score: score | 0 }]);
+    if (ie) {
+      alert(`저장 실패: ${ie.message}`);
+      return;
     }
+    const { data, error: fe } = await supabase.from('scores').select('*').order('score', { ascending: false });
+    if (!boardList) return;
+    boardList.innerHTML = fe
+      ? `<li>불러오기 실패:${fe.message}</li>`
+      : data.map((e, i) => `<li>${i + 1}위 — ${e.userId}: ${e.score}점</li>`).join('');
   }
 
   function update(dt) {
@@ -1040,6 +1032,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateHpBar();
+    updateSkillHud();
     if (scoreSpan) scoreSpan.textContent = String(score | 0);
     if (bossActive && boss) updateBossHpBar();
     if (player.hp <= 0) doGameOver();
@@ -1162,23 +1155,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.fill();
     ctx.restore();
 
-    const skill = getSelectedSkill();
-    const cooldownSec = Math.max(0, rightSkillCooldownMs) / 1000;
-    const ready = rightSkillCooldownMs <= 0;
-    const skillText = `우클릭: ${skill.name} ${ready ? '(준비)' : `(${cooldownSec.toFixed(1)}s)`}`;
-
-    ctx.save();
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillStyle = '#111';
-    ctx.fillRect(10, 78, 240, 30);
-    ctx.strokeStyle = ready ? '#7fd3ff' : '#ffcf66';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(10, 78, 240, 30);
-    ctx.fillStyle = ready ? '#dff6ff' : '#ffe8a3';
-    ctx.fillText(skillText, 18, 85);
-    ctx.restore();
   }
 
   function loop(time) {
@@ -1227,7 +1203,8 @@ document.addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(loop);
   });
   btnRetry?.addEventListener('click', () => {
-    if (menu) menu.style.display = 'block';
+    updateSkillHud();
+  if (menu) menu.style.display = 'block';
     if (ui) ui.style.display = 'none';
     canvas.style.display = 'none';
     if (gameOverScreen) gameOverScreen.style.display = 'none';
