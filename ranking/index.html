@@ -1,75 +1,68 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8"/>
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BulletHell 리더보드</title>
-  <style>
-    body { margin:0; padding:20px; font-family:sans-serif; background:#111; color:#eee; }
-    h1 { text-align:center; }
-    .btn-back {
-      display:block;
-      margin:0 auto 20px;
-      padding:10px 20px;
-      background:#444;
-      color:#fff;
-      border:none;
-      cursor:pointer;
-      font-size:1rem;
-      border-radius:4px;
-    }
-    ol { max-width:400px; margin:20px auto; padding-left:20px; }
-    li { margin:8px 0; }
-  </style>
+  <title>BulletHell-Web</title>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <!-- 메인으로 돌아가기 -->
-  <button class="btn-back" onclick="window.location.href='../'">
-    ← 메인 화면으로
-  </button>
+  <div id="mainMenu">
+    <h1>BulletHell-Web</h1>
+    <button id="btnStart">게임 시작</button>
 
-  <h1>BulletHell 리더보드</h1>
-  <ol id="boardList"><li>로딩 중…</li></ol>
+    <div id="skinShop">
+      <h2>스킨 상점</h2>
+      <div id="skins"></div>
+    </div>
+
+    <div id="skillLoadout">
+      <h2>우클릭 스킬</h2>
+      <div id="skills"></div>
+    </div>
+
+    <div id="highScore">
+      최고 점수: <span id="best">0</span>
+    </div>
+    <button id="btnLeaderboard">리더보드</button>
+  </div>
+
+  <div id="warning" style="display:none">
+    ⚠️ WARNING: 보스 곧 등장! ⚠️
+  </div>
+
+  <canvas id="gameCanvas" width="1200" height="720" style="display:none"></canvas>
+
+  <div id="ui" style="display:none">
+    <div id="hpBarContainer">
+      <label>HP:</label>
+      <div id="hpBar"><div></div></div>
+    </div>
+    <div id="scoreContainer">
+      <label>점수:</label><span id="score">0</span>
+    </div>
+    <div id="bossUi" style="display:none">
+      <label>Boss HP:</label>
+      <div id="bossHpBar"><div></div></div>
+    </div>
+  </div>
+
+  <div id="gameOverScreen" style="display:none">
+    <h2>게임 오버!</h2>
+    <div>최종 점수: <span id="finalScore">0</span></div>
+    <button id="submitScore">점수 제출</button>
+    <button id="btnRetry">다시하기</button>
+    <div id="leaderboard" style="display:none">
+      <h3>리더보드</h3>
+      <ol id="boardList"></ol>
+    </div>
+  </div>
 
   <script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
-    const SUPABASE_URL      = 'https://racbwrlvquamhqbqzsix.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhY2J3cmx2cXVhbWhxYnF6c2l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxMTM0MzMsImV4cCI6MjA2ODY4OTQzM30.pT24RRHE4oX9__fdldUT6Cic5P4MgGFk1HiIM46gXGE';
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    async function loadLeaderboard() {
-      const { data, error } = await supabase
-        .from('scores')
-        .select('userId,score,created_at')
-        .order('score', { ascending: false });
-
-      const list = document.getElementById('boardList');
-      if (error) {
-        list.innerHTML = `<li>불러오기 실패: ${error.message}</li>`;
-        return;
-      }
-      if (!data.length) {
-        list.innerHTML = `<li>아직 기록이 없습니다.</li>`;
-        return;
-      }
-
-      // 중복 닉네임 제거 (최고점만)
-      const seen = new Set();
-      const filtered = data.filter(({ userId }) => {
-        if (seen.has(userId)) return false;
-        seen.add(userId);
-        return true;
-      });
-
-      list.innerHTML = filtered
-        .map((e,i) =>
-          `<li>${i+1}위 — ${e.userId}: ${e.score}점 <small>(${new Date(e.created_at).toLocaleString()})</small></li>`
-        )
-        .join('');
-    }
-
-    loadLeaderboard();
+    document.getElementById('btnLeaderboard').addEventListener('click', () => {
+      window.location.href = './ranking/';
+    });
+    import './game.js';
   </script>
 </body>
 </html>
