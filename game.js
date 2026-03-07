@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  addDoc,
   serverTimestamp,
   collection,
   getDocs,
@@ -228,6 +229,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let healthPacks = [];
   let effects = [];
   let bossCores = [];
+  let fireZones = [];
+  let earthWalls = null;
+  let windTelegraphs = [];
   let score = 0;
   let gameOver = false;
   let spawnIntervalMs = NORMAL_SPAWN_START;
@@ -484,6 +488,9 @@ document.addEventListener('DOMContentLoaded', () => {
       this.waterHealUsed = false;
       this.waterHealActive = false;
       this.waterHealTimerMs = 0;
+      this.fireHazardUsed = false;
+      this.windTickMs = 0;
+      if (this.type === 'earth') initEarthWalls();
     }
     getRatio() {
       return this.hp / this.maxHp;
@@ -511,6 +518,11 @@ document.addEventListener('DOMContentLoaded', () => {
       this.updatePhase();
       if (this.type === 'water' && !this.waterHealUsed && !this.waterHealActive && this.getRatio() <= 0.5) {
         this.startWaterHealing();
+      }
+      if (this.type === 'fire' && !this.fireHazardUsed && this.getRatio() <= 0.5) {
+        this.fireHazardUsed = true;
+        startFireHazards();
+        spawnShockwave(this.x, this.y, 120, '#ff6b3d', 3);
       }
     }
     startWaterHealing() {
@@ -562,6 +574,13 @@ document.addEventListener('DOMContentLoaded', () => {
       this.updatePhase();
       this.moveAngle += dt / 1000;
       this.fireTickMs += dt;
+      if (this.type === 'wind') {
+        this.windTickMs += dt;
+        if (this.windTickMs >= 1300) {
+          this.windTickMs = 0;
+          queueWindTelegraph();
+        }
+      }
       const bossDmg = player.maxHp / 15;
       if (this.phase === 'burst') {
         this.x = this.baseX + Math.cos(this.moveAngle * 0.6) * this.data.orbitRadius;
@@ -697,6 +716,154 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function startFireHazards() {
+    fireZones = [];
+    const candidates = [
+      { x: 140, y: 110, w: 250, h: 150 },
+      { x: canvas.width - 390, y: 110, w: 250, h: 150 },
+      { x: 180, y: canvas.height - 250, w: 250, h: 150 },
+      { x: canvas.width - 430, y: canvas.height - 250, w: 250, h: 150 },
+      { x: canvas.width / 2 - 140, y: canvas.height / 2 - 90, w: 280, h: 180 },
+    ];
+    for (let i = 0; i < 2; i += 1) {
+      const zone = candidates.splice((Math.random() * candidates.length) | 0, 1)[0];
+      fireZones.push({ ...zone, life: 4500, maxLife: 4500, tickMs: 0 });
+    }
+  }
+
+  function updateFireHazards(dt) {
+    for (const zone of fireZones) {
+      zone.life -= dt;
+      if (player.x > zone.x && player.x < zone.x + zone.w && player.y > zone.y && player.y < zone.y + zone.h) {
+        zone.tickMs -= dt;
+        if (zone.tickMs <= 0) {
+          if (shieldActiveMs > 0) shieldActiveMs = 0;
+          else player.hp -= Math.max(1.4, player.maxHp / 40);
+          zone.tickMs = 350;
+          spawnHitEffect(player.x, player.y, '#ff9b54');
+        }
+      } else if (zone.tickMs < 0) {
+        zone.tickMs = 0;
+      }
+    }
+    fireZones = fireZones.filter(z => z.life > 0);
+  }
+
+  function drawFireHazards() {
+    for (const zone of fireZones) {
+      const alpha = Math.max(0.18, zone.life / zone.maxLife * 0.45);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#b73112';
+      ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+      ctx.globalAlpha = alpha + 0.12;
+      ctx.strokeStyle = '#ff9b54';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+      for (let i = 0; i < 6; i += 1) {
+        const fx = zone.x + 25 + i * ((zone.w - 50) / 5);
+        const fy = zone.y + zone.h * (0.3 + 0.35 * ((i % 2) ? 1 : 0.6));
+        ctx.beginPath();
+        ctx.arc(fx, fy, 8 + (i % 3), 0, Math.PI * 2);
+        ctx.fillStyle = i % 2 ? '#ff6b3d' : '#ffb35c';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  function initEarthWalls() {
+    earthWalls = { left: 0, right: 0, corridorMin: 220 };
+  }
+
+  function updateEarthWalls(dt) {
+    if (!earthWalls || !bossActive || !boss || boss.type !== 'earth') return;
+    const ratio = boss.getRatio();
+    const speed = 10 + (1 - ratio) * 24;
+    const maxWidth = (canvas.width - earthWalls.corridorMin) / 2;
+    earthWalls.left = Math.min(maxWidth, earthWalls.left + speed * dt / 1000);
+    earthWalls.right = Math.min(maxWidth, earthWalls.right + speed * dt / 1000);
+
+    if (player.x - player.r < earthWalls.left) {
+      player.x = earthWalls.left + player.r;
+      if (shieldActiveMs > 0) shieldActiveMs = 0;
+      else player.hp -= Math.max(1.8, player.maxHp / 28) * dt / 220;
+    }
+    if (player.x + player.r > canvas.width - earthWalls.right) {
+      player.x = canvas.width - earthWalls.right - player.r;
+      if (shieldActiveMs > 0) shieldActiveMs = 0;
+      else player.hp -= Math.max(1.8, player.maxHp / 28) * dt / 220;
+    }
+  }
+
+  function drawEarthWalls() {
+    if (!earthWalls) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(106,77,36,0.72)';
+    ctx.fillRect(0, 0, earthWalls.left, canvas.height);
+    ctx.fillRect(canvas.width - earthWalls.right, 0, earthWalls.right, canvas.height);
+    ctx.strokeStyle = 'rgba(225,187,125,0.9)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(earthWalls.left, 0);
+    ctx.lineTo(earthWalls.left, canvas.height);
+    ctx.moveTo(canvas.width - earthWalls.right, 0);
+    ctx.lineTo(canvas.width - earthWalls.right, canvas.height);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function queueWindTelegraph() {
+    if (!bossActive || !boss || boss.type !== 'wind') return;
+    const ang = Math.atan2(player.y - boss.y, player.x - boss.x);
+    const len = 1800;
+    windTelegraphs.push({
+      x1: boss.x,
+      y1: boss.y,
+      x2: boss.x + Math.cos(ang) * len,
+      y2: boss.y + Math.sin(ang) * len,
+      ang,
+      delayMs: 500,
+      life: 700,
+      maxLife: 700,
+      fired: false,
+    });
+  }
+
+  function updateWindTelegraphs(dt) {
+    for (const t of windTelegraphs) {
+      t.delayMs -= dt;
+      t.life -= dt;
+      if (!t.fired && t.delayMs <= 0) {
+        t.fired = true;
+        const bossDmg = player.maxHp / 30;
+        bullets.push(new Bullet(boss.x, boss.y, Math.cos(t.ang) * 11.5, Math.sin(t.ang) * 11.5, 4.5, '#d6fff8', bossDmg, false, { lifeMs: 260 }));
+      }
+    }
+    windTelegraphs = windTelegraphs.filter(t => t.life > 0);
+  }
+
+  function drawWindTelegraphs() {
+    for (const t of windTelegraphs) {
+      const alpha = t.fired ? 0.12 : 0.45;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#d6fff8';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(t.x1, t.y1);
+      ctx.lineTo(t.x2, t.y2);
+      ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#7fffd4';
+      ctx.beginPath();
+      ctx.moveTo(t.x1, t.y1);
+      ctx.lineTo(t.x2, t.y2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   function firePlayerBullet(tx, ty) {
     if (playerFireCooldownMs > 0 || !player || gameOver) return;
     const dx = tx - player.x;
@@ -819,6 +986,9 @@ document.addEventListener('DOMContentLoaded', () => {
     healthPacks = [];
     effects = [];
     bossCores = [];
+    fireZones = [];
+    earthWalls = null;
+    windTelegraphs = [];
     score = 0;
     gameOver = false;
     spawnIntervalMs = NORMAL_SPAWN_START;
@@ -1008,12 +1178,18 @@ document.addEventListener('DOMContentLoaded', () => {
         bossActive = false;
         boss = null;
         bossCores = [];
+        fireZones = [];
+        earthWalls = null;
+        windTelegraphs = [];
         if (bossUi) bossUi.style.display = 'none';
       }
     }
 
     bullets.forEach(b => b.update(dt));
     playerBullets.forEach(pb => pb.update(dt));
+    updateFireHazards(dt);
+    updateEarthWalls(dt);
+    updateWindTelegraphs(dt);
 
     for (const e of effects) {
       e.life -= dt;
@@ -1150,6 +1326,9 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.restore();
     }
 
+    drawFireHazards();
+    drawEarthWalls();
+    drawWindTelegraphs();
     healthPacks.forEach(h => h.draw());
     bossCores.forEach(c => c.draw());
     playerBullets.forEach(pb => pb.draw());
