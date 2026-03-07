@@ -1,411 +1,867 @@
-// game.js — BulletHell-Web
-// Added: PlayerBullet system (click / spacebar), revamped Boss (movement, real HP, phases)
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-const SUPABASE_URL      = 'https://racbwrlvquamhqbqzsix.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhY2J3cmx2cXVhbWhxYnF6c2l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxMTM0MzMsImV4cCI6MjA2ODY4OTQzM30.pT24RRHE4oX9__fdldUT6Cic5P4MgGFk1HiIM46gXGE';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const firebaseConfig = {
+  apiKey: "AIzaSyA65hHD3pzh8Jv91xBWxMOK_FG9j8vNL2o",
+  authDomain: "core-tempest-11588.firebaseapp.com",
+  projectId: "core-tempest-11588",
+  storageBucket: "core-tempest-11588.firebasestorage.app",
+  messagingSenderId: "343743820806",
+  appId: "1:343743820806:web:41391a57902093fea57f87",
+  measurementId: "G-4P8SZVSN3Q"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 document.addEventListener('DOMContentLoaded', () => {
-  // ── DOM refs ──────────────────────────────────────────────────────────────
-  const btnStart       = document.getElementById('btnStart');
-  const btnRetry       = document.getElementById('btnRetry');
-  const submitBtn      = document.getElementById('submitScore');
-  const menu           = document.getElementById('mainMenu');
-  const ui             = document.getElementById('ui');
-  const canvas         = document.getElementById('gameCanvas');
-  const ctx            = canvas.getContext('2d');
-  const warningDiv     = document.getElementById('warning');
-  const gameOverScreen = document.getElementById('gameOverScreen');
-  const finalScoreSpan = document.getElementById('finalScore');
-  const boardList      = document.getElementById('boardList');
-  const scoreSpan      = document.getElementById('score');
-  const hpBarDiv       = document.querySelector('#hpBar>div');
-  const bestSpan       = document.getElementById('best');
-  const skinsDiv       = document.getElementById('skins');
-  const bossUi         = document.getElementById('bossUi');
-  const bossHpFill     = document.querySelector('#bossHpBar>div');
+  const $ = id => document.getElementById(id);
 
-  // HP 숫자 텍스트
+  const btnStart = $('btnStart');
+  const btnRetry = $('btnRetry');
+  const submitBtn = $('submitScore');
+  const menu = $('mainMenu');
+  const ui = $('ui');
+  const canvas = $('gameCanvas');
+  const warningDiv = $('warning');
+  const gameOverScreen = $('gameOverScreen');
+  const finalScoreSpan = $('finalScore');
+  const boardList = $('boardList');
+  const scoreSpan = $('score');
+  const bestSpan = $('best');
+  const skinsDiv = $('skins');
+  const skillsDiv = $('skills');
+  const bossUi = $('bossUi');
+  const bossHpFill = document.querySelector('#bossHpBar>div');
+  const hpBarDiv = document.querySelector('#hpBar>div');
+  const hpBarContainer = $('hpBarContainer');
+
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  canvas.width = 1200;
+  canvas.height = 720;
+
   const hpText = document.createElement('div');
   hpText.id = 'hpText';
   Object.assign(hpText.style, {
-    position: 'absolute', width: '200px',
-    textAlign: 'center', fontSize: '12px', color: '#fff',
+    position: 'absolute',
+    width: '200px',
+    textAlign: 'center',
+    fontSize: '12px',
+    color: '#fff',
+    pointerEvents: 'none',
   });
-  document.getElementById('hpBarContainer').appendChild(hpText);
+  if (hpBarContainer) hpBarContainer.appendChild(hpText);
 
-  // ── 상수 ──────────────────────────────────────────────────────────────────
-  const FRAME_REF            = 16.6667;
-  const SCORE_PER_SEC        = 60;
-  const PLAYER_BULLET_DMG    = 25;
-  const PLAYER_FIRE_COOLDOWN = 150;  // ms
-  const BOSS_KILL_BONUS      = 500;
+  const skillHud = document.createElement('div');
+  skillHud.id = 'skillHud';
+  skillHud.textContent = '우클릭: -';
+  Object.assign(skillHud.style, {
+    marginTop: '10px',
+    display: 'inline-block',
+    padding: '6px 10px',
+    border: '1.5px solid #7fd3ff',
+    color: '#dff6ff',
+    background: 'rgba(17,17,17,0.9)',
+    font: 'bold 16px sans-serif',
+    lineHeight: '1.2',
+    minWidth: '210px',
+    boxSizing: 'border-box',
+  });
+  if (ui) ui.appendChild(skillHud);
 
-  // ── 상태 ──────────────────────────────────────────────────────────────────
-  let player, bullets, playerBullets, healthPacks, effects, score, gameOver;
-  let spawnIntervalMs, spawnTimerMs, difficultyTimerMs;
-  let nextBossIdx = 0;
-  const bossSchedule = [5000, 10000, 16000];
-  let bossActive = false;
-  let boss       = null;
-  let lastHealthThreshold = 0, lastMaxHpThreshold = 0;
-  let keys       = {};
-  let lastTime   = 0;
-  let mouseX     = 400;
-  let mouseY     = 300;
-  // 보스 스폰 예고 레티클용
-  let warningActive  = false;  // 경고 중인지
-  let warningElapsedMs = 0;    // 경고 경과 시간
-  const WARNING_DURATION = 1000; // ms, maybeSpawnBoss의 setTimeout과 동일
-  let playerFireCooldownMs = 0;
+  const FRAME_REF = 16.6667;
+  const SCORE_PER_SEC = 60;
+  const PLAYER_BULLET_DMG = 25;
+  const PLAYER_FIRE_COOLDOWN = 150;
+  const PLAYER_BASE_SPEED = 4.2;
+  const NORMAL_SPAWN_START = 1000;
+  const NORMAL_SPAWN_MIN = 300;
+  const WARNING_DURATION = 1000;
+  const BOSS_KILL_BONUS = 1000;
+  const POWERUP_DURATION = 5000;
+  const POWERUP_SPEED_MULT = 1.15;
+  const POWERUP_FIRE_COOLDOWN = 100;
 
-  // ── 스킨 & 최고점 ─────────────────────────────────────────────────────────
+  const bossSchedule = [5000, 10000, 16000, 23000];
+  const bossOrder = ['fire', 'water', 'earth', 'wind'];
+
   const skins = [
     { color: '#ff0', cost: 0 },
     { color: '#0f0', cost: 5000 },
     { color: '#fff', cost: 10000 },
   ];
-  let selectedSkin = 0;
+
+  const rightSkills = [
+    { id: 'shield', name: '방패', desc: '짧게 피격 무효화', cooldown: 10000 },
+    { id: 'dash', name: '대시', desc: '마우스 방향 순간이동', cooldown: 6000 },
+    { id: 'burst', name: '충격파', desc: '주변 탄 제거/코어 피해', cooldown: 11000 },
+  ];
+
+  const elementData = {
+    fire: {
+      name: '보스(火)',
+      bg: '#2a0808',
+      border: '#8b1e1e',
+      burst: '#ff6b3d',
+      spiral: '#ff9a3d',
+      aimed: '#ff4a4a',
+      size: 76,
+      maxHp: 560,
+      thresholds: { burst: 0.72, spiral: 0.40 },
+      burstInterval: 740,
+      burstSpeed: 2.9,
+      burstCount: 18,
+      burstDestructRatio: 0.20,
+      spiralInterval: 46,
+      spiralSpeed: 2.9,
+      aimedInterval: 470,
+      aimedShots: 3,
+      aimedDelay: 90,
+      aimedSpeed: 3.9,
+      orbitRadius: 135,
+      chaseSpeed: 75,
+      zigSpeed: 130,
+      homing: 0.0,
+      heavy: false,
+    },
+    water: {
+      name: '보스(水)',
+      bg: '#071a2e',
+      border: '#1b4e88',
+      burst: '#4fd3ff',
+      spiral: '#68c6ff',
+      aimed: '#83d9ff',
+      size: 76,
+      maxHp: 700,
+      thresholds: { burst: 0.70, spiral: 0.42 },
+      burstInterval: 800,
+      burstSpeed: 2.5,
+      burstCount: 16,
+      burstDestructRatio: 0.25,
+      spiralInterval: 40,
+      spiralSpeed: 2.7,
+      aimedInterval: 520,
+      aimedShots: 3,
+      aimedDelay: 95,
+      aimedSpeed: 3.65,
+      orbitRadius: 115,
+      chaseSpeed: 66,
+      zigSpeed: 105,
+      homing: 0.0,
+      heavy: false,
+      waterHeal: true,
+    },
+    earth: {
+      name: '보스(土)',
+      bg: '#1b1408',
+      border: '#6a4d24',
+      burst: '#c7994f',
+      spiral: '#d6aa65',
+      aimed: '#e1bb7d',
+      size: 82,
+      maxHp: 860,
+      thresholds: { burst: 0.76, spiral: 0.48 },
+      burstInterval: 820,
+      burstSpeed: 2.25,
+      burstCount: 14,
+      burstDestructRatio: 0.18,
+      spiralInterval: 52,
+      spiralSpeed: 2.45,
+      aimedInterval: 540,
+      aimedShots: 3,
+      aimedDelay: 100,
+      aimedSpeed: 3.45,
+      orbitRadius: 110,
+      chaseSpeed: 60,
+      zigSpeed: 92,
+      homing: 0.0,
+      heavy: true,
+    },
+    wind: {
+      name: '보스(風)',
+      bg: '#081f16',
+      border: '#27a56f',
+      burst: '#68ffb9',
+      spiral: '#9ffff1',
+      aimed: '#d6fff8',
+      size: 72,
+      maxHp: 780,
+      thresholds: { burst: 0.68, spiral: 0.36 },
+      burstInterval: 700,
+      burstSpeed: 2.6,
+      burstCount: 18,
+      burstDestructRatio: 0.22,
+      spiralInterval: 38,
+      spiralSpeed: 2.9,
+      aimedInterval: 390,
+      aimedShots: 4,
+      aimedDelay: 78,
+      aimedSpeed: 3.55,
+      orbitRadius: 140,
+      chaseSpeed: 85,
+      zigSpeed: 132,
+      homing: 0.05,
+      heavy: false,
+    },
+  };
+
   let bestScore = parseInt(localStorage.getItem('best') || '0', 10);
+  let selectedSkin = 0;
+  let selectedSkill = localStorage.getItem('selectedRightSkill') || 'shield';
+
+  let player;
+  let bullets = [];
+  let playerBullets = [];
+  let healthPacks = [];
+  let effects = [];
+  let bossCores = [];
+  let score = 0;
+  let gameOver = false;
+  let spawnIntervalMs = NORMAL_SPAWN_START;
+  let spawnTimerMs = 0;
+  let difficultyTimerMs = 0;
+  let nextBossIdx = 0;
+  let bossActive = false;
+  let boss = null;
+  let warningActive = false;
+  let warningElapsedMs = 0;
+  let warningBossType = 'fire';
+  let warningBossName = '보스';
+  let pendingBossType = 'fire';
+  let lastHealthThreshold = 0;
+  let lastMaxHpThreshold = 0;
+  let deletedHealthPacksForBoss = 0;
+  let keys = {};
+  let lastTime = 0;
+  let mouseX = canvas.width / 2;
+  let mouseY = canvas.height / 2;
+  let playerFireCooldownMs = 0;
+  let powerUpMs = 0;
+  let rightSkillCooldownMs = 0;
+  let shieldActiveMs = 0;
+  let dashTrailMs = 0;
   let isSubmittingScore = false;
   let scoreSubmitted = false;
-  bestSpan.textContent = bestScore;
 
-  skins.forEach((s, i) => {
-    const d = document.createElement('div');
-    d.className = 'skin';
-    d.style.background = s.color;
-    if (bestScore < s.cost) d.classList.add('locked');
-    d.onclick = () => {
-      if (bestScore >= s.cost) {
-        selectedSkin = i;
-        document.querySelectorAll('.skin').forEach(x => x.style.borderColor = '#fff');
-        d.style.borderColor = '#f00';
-      }
-    };
-    skinsDiv.appendChild(d);
-  });
-  document.querySelectorAll('.skin')[0].style.borderColor = '#f00';
-
-  // ── HealthPack ────────────────────────────────────────────────────────────
-  class HealthPack {
-    constructor() {
-      this.r = 8; this.color = '#ff66cc';
-      this.x = Math.random() * (canvas.width  - 20) + 10;
-      this.y = Math.random() * (canvas.height - 20) + 10;
-    }
-    draw() {
-      ctx.fillStyle = this.color;
-      ctx.beginPath();
-      const h = this.r * 0.3;
-      ctx.moveTo(this.x, this.y + this.r * 0.3);
-      ctx.bezierCurveTo(this.x - this.r,       this.y - h,
-                        this.x - this.r * 1.5,  this.y + this.r * 0.8,
-                        this.x,                  this.y + this.r * 1.6);
-      ctx.bezierCurveTo(this.x + this.r * 1.5,  this.y + this.r * 0.8,
-                        this.x + this.r,          this.y - h,
-                        this.x,                   this.y + this.r * 0.3);
-      ctx.closePath(); ctx.fill();
-    }
+  function getSelectedSkill() {
+    return rightSkills.find(s => s.id === selectedSkill) || rightSkills[0];
   }
 
-  // ── 적 탄환 ───────────────────────────────────────────────────────────────
+  function renderSkinButtons() {
+    if (!skinsDiv) return;
+    skinsDiv.innerHTML = '';
+    skins.forEach((s, i) => {
+      const d = document.createElement('div');
+      d.className = 'skin';
+      d.style.background = s.color;
+      if (bestScore < s.cost) d.classList.add('locked');
+      d.onclick = () => {
+        if (bestScore >= s.cost) {
+          selectedSkin = i;
+          [...skinsDiv.querySelectorAll('.skin')].forEach(x => x.style.borderColor = '#fff');
+          d.style.borderColor = '#f00';
+        }
+      };
+      skinsDiv.appendChild(d);
+    });
+    const current = skinsDiv.querySelectorAll('.skin')[selectedSkin];
+    if (current) current.style.borderColor = '#f00';
+  }
+
+  function renderSkillButtons() {
+    if (!skillsDiv) return;
+    skillsDiv.innerHTML = '';
+    rightSkills.forEach(skill => {
+      const btn = document.createElement('button');
+      btn.className = 'skillBtn';
+      if (skill.id === selectedSkill) btn.classList.add('selected');
+      btn.innerHTML = `<strong>${skill.name}</strong><small>${skill.desc}</small>`;
+      btn.onclick = () => {
+        selectedSkill = skill.id;
+        localStorage.setItem('selectedRightSkill', selectedSkill);
+        renderSkillButtons();
+      };
+      skillsDiv.appendChild(btn);
+    });
+  }
+
+  renderSkinButtons();
+  renderSkillButtons();
+  if (bestSpan) bestSpan.textContent = bestScore;
+
   class Bullet {
-    // destructible: 플레이어 탄환으로 제거 가능 여부
-    // alive: false가 되면 프레임 끝에서 일괄 제거 (splice 즉시 호출 금지)
-    constructor(x, y, vx, vy, r, color, dmg, destructible = false) {
-      this.x = x; this.y = y;
-      this.vx = vx; this.vy = vy;
-      this.r = r; this.color = color; this.dmg = dmg;
+    constructor(x, y, vx, vy, r, color, dmg, destructible = false, opts = {}) {
+      this.x = x;
+      this.y = y;
+      this.vx = vx;
+      this.vy = vy;
+      this.r = r;
+      this.color = color;
+      this.dmg = dmg;
       this.destructible = destructible;
       this.alive = true;
+      this.lifeMs = opts.lifeMs ?? Infinity;
+      this.linger = opts.linger ?? false;
+      this.homing = opts.homing ?? 0;
+      this.heavy = opts.heavy ?? false;
     }
-
-    // 궤적 계산만 담당 — destructible 여부는 여기서 결정하지 않음
-    static aimedFromEdge() {
-      let x, y;
-      if (Math.random() < 0.5) {
-        x = Math.random() * canvas.width;
-        y = Math.random() < 0.5 ? 0 : canvas.height;
-      } else {
-        x = Math.random() < 0.5 ? 0 : canvas.width;
-        y = Math.random() * canvas.height;
-      }
-      const dx = player.x - x, dy = player.y - y;
-      const L  = Math.hypot(dx, dy) || 1;
-      const sp = 3 + score / 5000;
-      // destructible=false: 생성 정책 함수에서 오버라이드
-      return new Bullet(x, y, dx / L * sp, dy / L * sp, 5, '#f00', player.maxHp / 15, false);
-    }
-
-    draw() {
-      if (this.destructible) {
-        // 제거 가능: 초록 + 흰 외곽선
-        ctx.fillStyle = '#3f3';
-        ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI); ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      } else {
-        // 제거 불가: 기존 색 단색
-        ctx.fillStyle = this.color;
-        ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI); ctx.fill();
-      }
-    }
-
     update(dt) {
-      const k = dt / FRAME_REF;
-      this.x += this.vx * k;
-      this.y += this.vy * k;
+      if (this.homing > 0 && player) {
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const speed = Math.hypot(this.vx, this.vy) || 1;
+        const tx = (dx / len) * speed;
+        const ty = (dy / len) * speed;
+        this.vx += (tx - this.vx) * this.homing;
+        this.vy += (ty - this.vy) * this.homing;
+      }
+      this.x += this.vx * dt / FRAME_REF;
+      this.y += this.vy * dt / FRAME_REF;
+      this.lifeMs -= dt;
+      if (this.lifeMs <= 0) this.alive = false;
     }
     inBounds() {
-      return this.x >= -20 && this.x <= canvas.width  + 20 &&
-             this.y >= -20 && this.y <= canvas.height + 20;
+      const margin = this.linger ? 80 : 50;
+      return this.x >= -margin && this.x <= canvas.width + margin && this.y >= -margin && this.y <= canvas.height + margin;
+    }
+    draw() {
+      ctx.save();
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fill();
+      if (this.destructible) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+      }
+      if (this.heavy) {
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff3';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r + 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   }
 
-  // ── 탄환 생성 정책 ────────────────────────────────────────────────────────
-  // aimedFromEdge()는 궤적 계산, 여기서 destructible 여부를 결정함
-  // 일반 탄막: 25% 확률로 destructible
-  function spawnNormalBullets() {
-    const b1 = Bullet.aimedFromEdge();
-    const b2 = Bullet.aimedFromEdge();
-    b1.destructible = Math.random() < 0.25;
-    b2.destructible = Math.random() < 0.25;
-    bullets.push(b1, b2);
-  }
-
-  // 보스 burst 탄환 생성: destructibleRatio 비율만큼 제거 가능으로 표시
-  function spawnBossBurstBullets(bossX, bossY, bossDmg, destructibleRatio = 0.20) {
-    const n = 16;
-    for (let i = 0; i < n; i++) {
-      const a    = (2 * Math.PI * i) / n;
-      const isD  = Math.random() < destructibleRatio;
-      // destructible이면 초록으로 렌더되므로 color는 의미 없지만 일관성 유지
-      const b = new Bullet(bossX, bossY, Math.cos(a) * 2.2, Math.sin(a) * 2.2, 6, '#f80', bossDmg, isD);
-      bullets.push(b);
-    }
-  }
-
-  // ── 플레이어 탄환 ─────────────────────────────────────────────────────────
   class PlayerBullet {
-    constructor(x, y, vx, vy) {
-      this.x = x; this.y = y;
-      this.vx = vx; this.vy = vy;
-      this.r    = 4;
-      this.dmg  = PLAYER_BULLET_DMG;
+    constructor(x, y, vx, vy, dmg = PLAYER_BULLET_DMG) {
+      this.x = x;
+      this.y = y;
+      this.vx = vx;
+      this.vy = vy;
+      this.r = 3;
+      this.dmg = dmg;
       this.alive = true;
     }
     update(dt) {
-      const k = dt / FRAME_REF;
-      this.x += this.vx * k;
-      this.y += this.vy * k;
-    }
-    draw() {
-      ctx.shadowBlur  = 8;
-      ctx.shadowColor = '#88f';
-      ctx.fillStyle   = '#ccf';
-      ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI); ctx.fill();
-      ctx.shadowBlur  = 0;
+      this.x += this.vx * dt / FRAME_REF;
+      this.y += this.vy * dt / FRAME_REF;
     }
     inBounds() {
-      return this.x >= -10 && this.x <= canvas.width  + 10 &&
-             this.y >= -10 && this.y <= canvas.height + 10;
+      return this.x >= -20 && this.x <= canvas.width + 20 && this.y >= -20 && this.y <= canvas.height + 20;
+    }
+    draw() {
+      ctx.save();
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ccf';
+      ctx.fillStyle = '#ccf';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
   }
 
-  function firePlayerBullet(targetX, targetY) {
-    if (playerFireCooldownMs > 0) return;
-    const dx = targetX - player.x;
-    const dy = targetY - player.y;
-    const L  = Math.hypot(dx, dy) || 1;
-    playerBullets.push(new PlayerBullet(player.x, player.y, dx / L * 7, dy / L * 7));
-    playerFireCooldownMs = PLAYER_FIRE_COOLDOWN;
-  }
-
-  // ── Boss ──────────────────────────────────────────────────────────────────
-  class Boss {
+  class HealthPack {
     constructor() {
-      this.size      = 80;
-      this.x         = canvas.width  / 2;
-      this.y         = canvas.height / 2;
-      this.maxHp     = 600;
-      this.hp        = this.maxHp;
-      this.rotate    = 0;
-      this.fireTickMs  = 0;
-      this.phase       = 'burst';
-      this.moveAngle   = 0;
-      this.baseX       = canvas.width  / 2;
-      this.baseY       = canvas.height / 2;
-      // aimed 페이즈 연발: setTimeout 대신 내부 큐
-      this.burstQueue  = 0;
-      this.burstTickMs = 0;
-      // 피격 flash
-      this.hitFlashMs  = 0;
+      this.r = 7;
+      this.color = '#ff66cc';
+      let tries = 0;
+      do {
+        this.x = 60 + Math.random() * (canvas.width - 120);
+        this.y = 60 + Math.random() * (canvas.height - 120);
+        tries += 1;
+      } while (tries < 20 && player && Math.hypot(this.x - player.x, this.y - player.y) < 120);
     }
-
-    hit(dmg) {
-      this.hp -= dmg;
-      this.hitFlashMs = 80;
-    }
-
     draw() {
       ctx.save();
       ctx.translate(this.x, this.y);
-      ctx.rotate(this.rotate);
-
-      if (this.hitFlashMs > 0) {
-        ctx.fillStyle = '#fff';
-      } else {
-        const phaseColors = { burst: '#0ff', spiral: '#ffa500', aimed: '#f55' };
-        ctx.fillStyle = phaseColors[this.phase] || '#0ff';
-      }
-      ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
-
-      // HP에 따라 어두워지는 코어
-      const hpRatio = this.hp / this.maxHp;
-      ctx.fillStyle = `rgba(0,0,0,${0.3 + (1 - hpRatio) * 0.5})`;
-      ctx.fillRect(-this.size / 4, -this.size / 4, this.size / 2, this.size / 2);
-
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.moveTo(0, 6);
+      ctx.bezierCurveTo(10, -4, 10, -14, 0, -8);
+      ctx.bezierCurveTo(-10, -14, -10, -4, 0, 6);
+      ctx.fill();
       ctx.restore();
     }
+  }
 
+  class BossCore {
+    constructor(x, y, hits, color) {
+      this.x = x;
+      this.y = y;
+      this.hits = hits;
+      this.hp = hits * PLAYER_BULLET_DMG;
+      this.maxHp = this.hp;
+      this.size = 14 + hits * 4;
+      this.color = color;
+      this.alive = true;
+    }
+    hit(dmg) {
+      this.hp -= dmg;
+      spawnHitEffect(this.x, this.y, this.color);
+      if (this.hp <= 0) {
+        this.alive = false;
+        spawnShockwave(this.x, this.y, 40, this.color, 2);
+      }
+    }
+    draw() {
+      const ratio = Math.max(0, this.hp / this.maxHp);
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.fillStyle = this.color;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -this.size);
+      ctx.lineTo(this.size * 0.8, 0);
+      ctx.lineTo(0, this.size);
+      ctx.lineTo(-this.size * 0.8, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = `rgba(0,0,0,${0.2 + (1 - ratio) * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size * 0.32, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(this.hits), 0, 4);
+      ctx.restore();
+    }
+  }
+
+  class Boss {
+    constructor(type) {
+      this.type = type;
+      this.data = elementData[type];
+      this.x = canvas.width / 2;
+      this.y = canvas.height / 2;
+      this.baseX = this.x;
+      this.baseY = this.y;
+      this.size = this.data.size;
+      this.maxHp = this.data.maxHp;
+      this.hp = this.maxHp;
+      this.phase = 'burst';
+      this.rotate = 0;
+      this.moveAngle = 0;
+      this.fireTickMs = 0;
+      this.burstQueue = 0;
+      this.burstTickMs = 0;
+      this.spawnHoldMs = 450;
+      this.invulnMs = 550;
+      this.hitFlashMs = 0;
+      this.phaseShockQueued = false;
+      this.waterHealUsed = false;
+      this.waterHealActive = false;
+      this.waterHealTimerMs = 0;
+    }
+    getRatio() {
+      return this.hp / this.maxHp;
+    }
+    updatePhase() {
+      const ratio = this.getRatio();
+      const prev = this.phase;
+      if (ratio >= this.data.thresholds.burst) this.phase = 'burst';
+      else if (ratio >= this.data.thresholds.spiral) this.phase = 'spiral';
+      else this.phase = 'aimed';
+      if (prev !== this.phase) {
+        spawnShockwave(this.x, this.y, 120, this.getPhaseColor(), 3);
+      }
+    }
+    getPhaseColor() {
+      if (this.phase === 'burst') return this.data.burst;
+      if (this.phase === 'spiral') return this.data.spiral;
+      return this.data.aimed;
+    }
+    hit(dmg) {
+      if (this.invulnMs > 0) return;
+      this.hp -= dmg;
+      this.hitFlashMs = 80;
+      if (this.hp < 0) this.hp = 0;
+      this.updatePhase();
+      if (this.type === 'water' && !this.waterHealUsed && !this.waterHealActive && this.getRatio() <= 0.5) {
+        this.startWaterHealing();
+      }
+    }
+    startWaterHealing() {
+      this.waterHealUsed = true;
+      this.waterHealActive = true;
+      this.waterHealTimerMs = 4000;
+      this.x = canvas.width / 2;
+      this.y = canvas.height / 2;
+      bossCores = [];
+      const offsetX = 170;
+      const offsetY = 110;
+      const cfg = [1, 2, 3, 4];
+      const pts = [
+        [-offsetX, -offsetY],
+        [ offsetX, -offsetY],
+        [-offsetX,  offsetY],
+        [ offsetX,  offsetY],
+      ];
+      for (let i = 0; i < 4; i += 1) {
+        bossCores.push(new BossCore(canvas.width / 2 + pts[i][0], canvas.height / 2 + pts[i][1], cfg[i], '#8fe7ff'));
+      }
+      spawnShockwave(this.x, this.y, 100, '#8fe7ff', 2.5);
+    }
+    resolveWaterHealing() {
+      const remain = bossCores.filter(c => c.alive).length;
+      const healAmount = remain * this.maxHp * 0.07;
+      this.hp = Math.min(this.maxHp, this.hp + healAmount);
+      if (remain === 0) {
+        this.invulnMs = 0;
+      }
+      this.waterHealActive = false;
+      bossCores = [];
+      spawnShockwave(this.x, this.y, 140, '#8fe7ff', 3);
+      this.updatePhase();
+    }
     update(dt) {
-      const hpRatio = this.hp / this.maxHp;
-      if      (hpRatio >= 0.70) this.phase = 'burst';
-      else if (hpRatio >= 0.40) this.phase = 'spiral';
-      else                       this.phase = 'aimed';
-
-      const rotSpeeds = { burst: 0.001, spiral: 0.002, aimed: 0.004 };
-      this.rotate += rotSpeeds[this.phase] * dt;
-
-      this._updateMovement(dt);
-
       if (this.hitFlashMs > 0) this.hitFlashMs -= dt;
-
+      if (this.spawnHoldMs > 0) {
+        this.spawnHoldMs -= dt;
+        this.invulnMs -= dt;
+        return;
+      }
+      if (this.invulnMs > 0) this.invulnMs -= dt;
+      if (this.waterHealActive) {
+        this.waterHealTimerMs -= dt;
+        if (this.waterHealTimerMs <= 0) this.resolveWaterHealing();
+        return;
+      }
+      this.updatePhase();
+      this.moveAngle += dt / 1000;
       this.fireTickMs += dt;
-      const bossDmg = player.maxHp / 15; // 기존 *2에서 절반으로 낮춤
-
+      const bossDmg = player.maxHp / 15;
       if (this.phase === 'burst') {
-        if (this.fireTickMs >= 800) {
+        this.x = this.baseX + Math.cos(this.moveAngle * 0.6) * this.data.orbitRadius;
+        this.y = this.baseY + Math.sin(this.moveAngle * 0.6) * this.data.orbitRadius;
+        if (this.fireTickMs >= this.data.burstInterval) {
           this.fireTickMs = 0;
-          // 생성 정책 함수 — burst만 20% destructible, 나머지 페이즈는 강제 false
-          spawnBossBurstBullets(this.x, this.y, bossDmg, 0.20);
+          for (let i = 0; i < this.data.burstCount; i += 1) {
+            const a = (Math.PI * 2 * i) / this.data.burstCount;
+            const destructible = Math.random() < this.data.burstDestructRatio;
+            bullets.push(new Bullet(
+              this.x,
+              this.y,
+              Math.cos(a) * this.data.burstSpeed,
+              Math.sin(a) * this.data.burstSpeed,
+              this.data.heavy ? 7.5 : 5.5,
+              this.data.burst,
+              bossDmg,
+              destructible,
+              { heavy: this.data.heavy }
+            ));
+          }
         }
       } else if (this.phase === 'spiral') {
-        if (this.fireTickMs >= 40) {
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const len = Math.hypot(dx, dy) || 1;
+        this.x += (dx / len) * this.data.chaseSpeed * dt / 1000 + Math.sin(this.moveAngle * 3) * 30 * dt / 1000;
+        this.y += (dy / len) * this.data.chaseSpeed * dt / 1000 + Math.cos(this.moveAngle * 2) * 20 * dt / 1000;
+        this.x = clamp(this.x, 80, canvas.width - 80);
+        this.y = clamp(this.y, 80, canvas.height - 80);
+        if (this.fireTickMs >= this.data.spiralInterval) {
           this.fireTickMs = 0;
-          const a = (performance.now() / 30) % (2 * Math.PI);
-          // spiral: non-destructible 강제
-          bullets.push(new Bullet(this.x, this.y, Math.cos(a)           * 2.8, Math.sin(a)           * 2.8, 5.5, '#ffa500', bossDmg, false));
-          bullets.push(new Bullet(this.x, this.y, Math.cos(a + Math.PI) * 2.8, Math.sin(a + Math.PI) * 2.8, 5.5, '#ffa500', bossDmg, false));
+          const a = (performance.now() / 220) % (Math.PI * 2);
+          bullets.push(new Bullet(this.x, this.y, Math.cos(a) * this.data.spiralSpeed, Math.sin(a) * this.data.spiralSpeed, this.data.heavy ? 7 : 5.5, this.data.spiral, bossDmg, false, { heavy: this.data.heavy }));
+          bullets.push(new Bullet(this.x, this.y, Math.cos(a + Math.PI) * this.data.spiralSpeed, Math.sin(a + Math.PI) * this.data.spiralSpeed, this.data.heavy ? 7 : 5.5, this.data.spiral, bossDmg, false, { heavy: this.data.heavy }));
         }
       } else {
-        // aimed: non-destructible 강제 — 핵심 위협이므로 제거 불가
-        if (this.fireTickMs >= 500 && this.burstQueue === 0) {
-          this.fireTickMs  = 0;
-          this.burstQueue  = 3;
+        const futureX = player.x + (keys['ArrowRight'] || keys['d'] ? 50 : 0) - (keys['ArrowLeft'] || keys['a'] ? 50 : 0);
+        const futureY = player.y + (keys['ArrowDown'] || keys['s'] ? 35 : 0) - (keys['ArrowUp'] || keys['w'] ? 35 : 0);
+        const dx = futureX - this.x;
+        const dy = futureY - this.y;
+        const len = Math.hypot(dx, dy) || 1;
+        this.x += (dx / len) * this.data.zigSpeed * dt / 1000 + Math.sin(this.moveAngle * 5) * 55 * dt / 1000;
+        this.y += (dy / len) * this.data.zigSpeed * dt / 1000 + Math.cos(this.moveAngle * 4) * 35 * dt / 1000;
+        this.x = clamp(this.x, 80, canvas.width - 80);
+        this.y = clamp(this.y, 80, canvas.height - 80);
+        if (this.fireTickMs >= this.data.aimedInterval && this.burstQueue === 0) {
+          this.fireTickMs = 0;
+          this.burstQueue = this.data.aimedShots;
           this.burstTickMs = 0;
         }
         if (this.burstQueue > 0) {
           this.burstTickMs += dt;
-          if (this.burstTickMs >= 100) {
+          if (this.burstTickMs >= this.data.aimedDelay) {
             this.burstTickMs = 0;
-            this.burstQueue--;
-            const dx = player.x - this.x, dy = player.y - this.y;
-            const L  = Math.hypot(dx, dy) || 1;
-            bullets.push(new Bullet(this.x, this.y, dx / L * 3.6, dy / L * 3.6, 6, '#f0f', bossDmg, false));
+            this.burstQueue -= 1;
+            const dx2 = player.x - this.x;
+            const dy2 = player.y - this.y;
+            const len2 = Math.hypot(dx2, dy2) || 1;
+            const shotIdx = this.data.aimedShots - this.burstQueue;
+            const spread = (shotIdx - (this.data.aimedShots + 1) / 2) * 0.09;
+            const ang = Math.atan2(dy2, dx2) + spread;
+            bullets.push(new Bullet(this.x, this.y, Math.cos(ang) * this.data.aimedSpeed, Math.sin(ang) * this.data.aimedSpeed, this.data.heavy ? 7.2 : 6, this.data.aimed, bossDmg, false, { homing: this.data.homing, heavy: this.data.heavy }));
+            if (shotIdx === this.data.aimedShots) {
+              bullets.push(new Bullet(this.x, this.y, Math.cos(ang + 0.18) * 2.2, Math.sin(ang + 0.18) * 2.2, 7.5, this.data.aimed, bossDmg * 0.9, false, { lifeMs: 1600, linger: true }));
+            }
           }
+        }
+        if (this.fireTickMs >= 2600) {
+          this.fireTickMs = 0;
+          spawnShockwave(this.x, this.y, 90, this.data.aimed, 2.5, true);
         }
       }
     }
-
-    _updateMovement(dt) {
-      const k = dt / 1000;
-      this.moveAngle += k;
-
-      if (this.phase === 'burst') {
-        // 중앙 기준 원형 궤도
-        this.x = this.baseX + Math.cos(this.moveAngle * 0.6) * 100;
-        this.y = this.baseY + Math.sin(this.moveAngle * 0.6) * 100;
-      } else if (this.phase === 'spiral') {
-        // 플레이어 추적 + 사인 오프셋
-        const dx = player.x - this.x, dy = player.y - this.y;
-        const L  = Math.hypot(dx, dy) || 1;
-        this.x += (dx / L) * 60 * k + Math.sin(this.moveAngle * 3) * 30 * k;
-        this.y += (dy / L) * 60 * k + Math.cos(this.moveAngle * 2) * 20 * k;
-        this.x = Math.max(80, Math.min(canvas.width  - 80, this.x));
-        this.y = Math.max(80, Math.min(canvas.height - 80, this.y));
-      } else {
-        // 빠른 지그재그 추적
-        const dx = player.x - this.x, dy = player.y - this.y;
-        const L  = Math.hypot(dx, dy) || 1;
-        this.x += (dx / L) * 100 * k + Math.sin(this.moveAngle * 5) * 60 * k;
-        this.y += (dy / L) * 100 * k + Math.cos(this.moveAngle * 4) * 40 * k;
-        this.x = Math.max(80, Math.min(canvas.width  - 80, this.x));
-        this.y = Math.max(80, Math.min(canvas.height - 80, this.y));
-      }
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.moveAngle);
+      ctx.fillStyle = this.hitFlashMs > 0 ? '#fff' : this.getPhaseColor();
+      ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+      ctx.strokeStyle = this.data.border;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-this.size / 2, -this.size / 2, this.size, this.size);
+      ctx.restore();
     }
   }
 
-  // ── UI 업데이트 ───────────────────────────────────────────────────────────
+  function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+  }
+
   function updateHpBar() {
+    if (!hpBarDiv || !player) return;
     const pct = Math.max(0, player.hp) / player.maxHp;
     hpBarDiv.style.width = `${200 * Math.max(0, Math.min(1, pct))}px`;
-    hpText.textContent   = `${Math.floor(player.hp)}/${Math.floor(player.maxHp)}`;
+    hpText.textContent = `${Math.floor(player.hp)}/${Math.floor(player.maxHp)}`;
   }
+
   function updateBossHpBar() {
     if (!bossHpFill || !boss) return;
     bossHpFill.style.width = `${240 * Math.max(0, Math.min(1, boss.hp / boss.maxHp))}px`;
   }
 
-  // ── 초기화 ────────────────────────────────────────────────────────────────
-  function initGame() {
-    player = { x: 400, y: 300, r: 8, speed: 4, hp: 100, maxHp: 100, color: skins[selectedSkin].color };
-    bullets           = [];
-    playerBullets     = [];
-    healthPacks       = [];
-    effects           = [];
-    score             = 0;
-    gameOver          = false;
-    spawnIntervalMs   = 1000;
-    spawnTimerMs      = 0;
-    difficultyTimerMs = 0;
-    bossActive        = false;
-    nextBossIdx       = 0;
-    lastHealthThreshold  = 0;
-    lastMaxHpThreshold   = 0;
-    boss              = null;
-    playerFireCooldownMs = 0;
-    warningActive        = false;
-    warningElapsedMs     = 0;
-    isSubmittingScore    = false;
-    scoreSubmitted       = false;
+  function spawnHitEffect(x, y, color = '#afffaf') {
+    const lifespan = 150;
+    effects.push({ type: 'ring', x, y, color, life: lifespan, maxLife: lifespan, radius: 12 });
+    for (let i = 0; i < 4; i += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 1.5;
+      effects.push({
+        type: 'particle', x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color: '#fff',
+        life: lifespan,
+        maxLife: lifespan,
+      });
+    }
+  }
 
-    menu.style.display           = 'none';
-    ui.style.display             = 'block';
-    canvas.style.display         = 'block';
-    warningDiv.style.display     = 'none';
-    gameOverScreen.style.display = 'none';
+  function spawnShockwave(x, y, radius, color, lineWidth = 2, damagesPlayer = false) {
+    effects.push({
+      type: 'shockwave',
+      x, y,
+      radius,
+      maxRadius: radius,
+      color,
+      lineWidth,
+      damagesPlayer,
+      applied: false,
+      life: 320,
+      maxLife: 320,
+    });
+  }
+
+  function firePlayerBullet(tx, ty) {
+    if (playerFireCooldownMs > 0 || !player || gameOver) return;
+    const dx = tx - player.x;
+    const dy = ty - player.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const speed = 8.5;
+    playerBullets.push(new PlayerBullet(player.x, player.y, (dx / len) * speed, (dy / len) * speed));
+    playerFireCooldownMs = powerUpMs > 0 ? POWERUP_FIRE_COOLDOWN : PLAYER_FIRE_COOLDOWN;
+  }
+
+  function spawnNormalBullets() {
+    const edge = Math.floor(Math.random() * 4);
+    let x, y;
+    if (edge === 0) { x = Math.random() * canvas.width; y = -10; }
+    else if (edge === 1) { x = canvas.width + 10; y = Math.random() * canvas.height; }
+    else if (edge === 2) { x = Math.random() * canvas.width; y = canvas.height + 10; }
+    else { x = -10; y = Math.random() * canvas.height; }
+
+    const dx = player.x - x;
+    const dy = player.y - y;
+    const len = Math.hypot(dx, dy) || 1;
+    const speed = 3 + score / 5000;
+    const destructible = Math.random() < 0.25;
+    bullets.push(new Bullet(x, y, (dx / len) * speed, (dy / len) * speed, 5, destructible ? '#3f3' : '#f00', player.maxHp / 15, destructible));
+  }
+
+  function maybeSpawnBoss() {
+    if (bossActive || warningActive) return;
+    if (nextBossIdx < bossSchedule.length && score >= bossSchedule[nextBossIdx]) {
+      pendingBossType = bossOrder[nextBossIdx % bossOrder.length];
+      warningBossType = pendingBossType;
+      warningBossName = elementData[pendingBossType].name;
+      deletedHealthPacksForBoss = healthPacks.length;
+      healthPacks.length = 0;
+      warningActive = true;
+      warningElapsedMs = 0;
+      if (warningDiv) {
+        warningDiv.textContent = `${warningBossName} 접근`; 
+        warningDiv.style.display = 'block';
+      }
+      nextBossIdx += 1;
+    }
+  }
+
+  function awardBossPowerup() {
+    powerUpMs = POWERUP_DURATION;
+  }
+
+  function useRightSkill() {
+    if (gameOver || rightSkillCooldownMs > 0) return;
+    const skill = getSelectedSkill();
+    rightSkillCooldownMs = skill.cooldown;
+
+    if (skill.id === 'shield') {
+      shieldActiveMs = 600;
+      return;
+    }
+
+    if (skill.id === 'dash') {
+      const dx = mouseX - player.x;
+      const dy = mouseY - player.y;
+      const len = Math.hypot(dx, dy) || 1;
+      player.x = clamp(player.x + (dx / len) * 120, player.r, canvas.width - player.r);
+      player.y = clamp(player.y + (dy / len) * 120, player.r, canvas.height - player.r);
+      dashTrailMs = 180;
+      return;
+    }
+
+    if (skill.id === 'burst') {
+      spawnShockwave(player.x, player.y, 90, '#ddf', 2.5);
+      for (const b of bullets) {
+        const dx = b.x - player.x;
+        const dy = b.y - player.y;
+        if (dx * dx + dy * dy <= 95 * 95 && b.destructible) {
+          b.alive = false;
+          spawnHitEffect(b.x, b.y, '#ddf');
+        }
+      }
+      if (bossActive && boss && Math.hypot(boss.x - player.x, boss.y - player.y) < 120) {
+        boss.hit(65);
+      }
+      for (const core of bossCores) {
+        if (!core.alive) continue;
+        if (Math.hypot(core.x - player.x, core.y - player.y) < 120) {
+          core.hit(80);
+        }
+      }
+    }
+  }
+
+  function normalizeNameKey(name) {
+    return (name || '').trim().toLowerCase();
+  }
+
+  async function loadBestScores(limitCount = 10) {
+    const q = query(collection(db, 'bestScores'), orderBy('score', 'desc'), limit(limitCount));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data());
+  }
+
+  function renderBoardEntries(entries) {
+    if (!boardList) return;
+    boardList.innerHTML = entries.length
+      ? entries.map((e, i) => `<li>${i + 1}위 — ${e.name || '익명'}: ${e.score}점</li>`).join('')
+      : '<li>기록이 없습니다.</li>';
+  }
+
+  function initGame() {
+    player = {
+      x: canvas.width * 0.25,
+      y: canvas.height * 0.5,
+      r: 7,
+      speed: PLAYER_BASE_SPEED,
+      hp: 100,
+      maxHp: 100,
+      color: skins[selectedSkin].color,
+    };
+    bullets = [];
+    playerBullets = [];
+    healthPacks = [];
+    effects = [];
+    bossCores = [];
+    score = 0;
+    gameOver = false;
+    spawnIntervalMs = NORMAL_SPAWN_START;
+    spawnTimerMs = 0;
+    difficultyTimerMs = 0;
+    nextBossIdx = 0;
+    bossActive = false;
+    boss = null;
+    warningActive = false;
+    warningElapsedMs = 0;
+    lastHealthThreshold = 0;
+    lastMaxHpThreshold = 0;
+    deletedHealthPacksForBoss = 0;
+    playerFireCooldownMs = 0;
+    powerUpMs = 0;
+    rightSkillCooldownMs = 0;
+    shieldActiveMs = 0;
+    dashTrailMs = 0;
+    isSubmittingScore = false;
+    scoreSubmitted = false;
+    if (menu) menu.style.display = 'none';
+    if (ui) ui.style.display = 'block';
+    canvas.style.display = 'block';
+    if (warningDiv) warningDiv.style.display = 'none';
+    if (gameOverScreen) gameOverScreen.style.display = 'none';
     if (bossUi) bossUi.style.display = 'none';
-    submitBtn.disabled = true;
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '점수 제출'; }
     updateHpBar();
+    if (scoreSpan) scoreSpan.textContent = '0';
     if (bossHpFill) bossHpFill.style.width = '240px';
-    scoreSpan.textContent = 0;
     lastTime = performance.now();
   }
 
   function doGameOver() {
     gameOver = true;
-    gameOverScreen.style.display = 'flex';
-    finalScoreSpan.textContent   = score | 0;
-    submitBtn.disabled           = false;
-    submitBtn.textContent        = '점수 제출';
+    if (gameOverScreen) gameOverScreen.style.display = 'flex';
+    if (finalScoreSpan) finalScoreSpan.textContent = String(score | 0);
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '점수 제출'; }
+    loadBestScores(10).then(renderBoardEntries).catch(err => { if (boardList) boardList.innerHTML = `<li>불러오기 실패: ${err?.message || err}</li>`; });
     if (score > bestScore) {
       bestScore = score | 0;
-      localStorage.setItem('best', bestScore);
-      bestSpan.textContent = bestScore;
+      localStorage.setItem('best', String(bestScore));
+      if (bestSpan) bestSpan.textContent = String(bestScore);
     }
   }
 
@@ -416,199 +872,186 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!name) {
       name = prompt('이름 입력 (한글 1~4자)');
       if (!name) return;
-      if (!/^[가-힣]{1,4}$/.test(name)) { alert('이름은 한글 1~4자만'); return; }
+      name = name.trim();
+      if (!/^[가-힣]{1,4}$/.test(name)) {
+        alert('이름은 한글 1~4자만');
+        return;
+      }
       localStorage.setItem('nickname', name);
     }
 
-    const normalizedName = name.trim();
-    if (!normalizedName) return;
+    const nameKey = normalizeNameKey(name);
+    if (!nameKey) {
+      alert('이름이 비어 있습니다.');
+      return;
+    }
 
     isSubmittingScore = true;
-    submitBtn.disabled = true;
-    submitBtn.textContent = '제출 중...';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '제출 중...';
+    }
 
     try {
-      const { data: existingRows, error: fetchError } = await supabase
-        .from('scores')
-        .select('*')
-        .eq('userId', normalizedName)
-        .order('score', { ascending: false })
-        .limit(1);
+      const scoreValue = score | 0;
+      const ref = doc(db, 'bestScores', nameKey);
+      const snap = await getDoc(ref);
 
-      if (fetchError) throw fetchError;
-
-      const existing = existingRows && existingRows.length ? existingRows[0] : null;
-      const currentScore = score | 0;
-
-      if (!existing) {
-        const { error: insertError } = await supabase
-          .from('scores')
-          .insert([{ userId: normalizedName, score: currentScore }]);
-        if (insertError) throw insertError;
-      } else if (currentScore > (existing.score | 0)) {
-        const { error: updateError } = await supabase
-          .from('scores')
-          .update({ score: currentScore })
-          .eq('id', existing.id);
-        if (updateError) throw updateError;
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          name,
+          nameKey,
+          score: scoreValue,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        const prev = snap.data();
+        const prevScore = Number(prev.score ?? 0);
+        if (scoreValue > prevScore) {
+          await setDoc(ref, {
+            name,
+            nameKey,
+            score: scoreValue,
+            updatedAt: serverTimestamp(),
+          });
+        }
       }
 
+      const entries = await loadBestScores(10);
+      renderBoardEntries(entries);
       scoreSubmitted = true;
-      submitBtn.textContent = '제출 완료';
-
-      const { data, error: fe } = await supabase
-        .from('scores')
-        .select('*')
-        .order('score', { ascending: false });
-
-      if (fe) {
-        boardList.innerHTML = `<li>불러오기 실패:${fe.message}</li>`;
-      } else {
-        const bestByName = new Map();
-        for (const row of data) {
-          const rowName = String(row.userId ?? '익명').trim() || '익명';
-          const key = rowName.toLowerCase();
-          const rowScore = row.score | 0;
-          const prev = bestByName.get(key);
-          if (!prev || rowScore > (prev.score | 0)) {
-            bestByName.set(key, { userId: rowName, score: rowScore });
-          }
-        }
-        const deduped = Array.from(bestByName.values())
-          .sort((a, b) => (b.score | 0) - (a.score | 0));
-        boardList.innerHTML = deduped
-          .map((e, i) => `<li>${i + 1}위 — ${e.userId}: ${e.score}점</li>`)
-          .join('');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '제출 완료';
       }
     } catch (err) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = '점수 제출';
-      alert('저장 실패:' + (err?.message || err));
+      console.error(err);
+      alert(`저장 실패: ${err?.message || err}`);
+      if (submitBtn && !scoreSubmitted) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '점수 제출';
+      }
     } finally {
       isSubmittingScore = false;
     }
   }
 
-  function maybeSpawnBoss() {
-    if (nextBossIdx < bossSchedule.length && score >= bossSchedule[nextBossIdx]) {
-      warningDiv.style.display = 'block';
-      warningActive    = true;
-      warningElapsedMs = 0;
-      nextBossIdx++;
-    }
-  }
-
-  // ── 이펙트 시스템 ─────────────────────────────────────────────────────────
-  // effects[]는 단순 데이터 객체 배열. 클래스 불필요 — 수명과 위치만 관리.
-  // type: 'ring' | 'particle'
-  function spawnHitEffect(x, y) {
-    const LIFESPAN = 150; // ms
-
-    // 링 1개 — 반경이 시간에 따라 확장
-    effects.push({ type: 'ring', x, y, life: LIFESPAN, maxLife: LIFESPAN });
-
-    // 파티클 4개 — 랜덤 방향으로 짧게 퍼짐
-    for (let i = 0; i < 4; i++) {
-      const angle = Math.random() * 2 * Math.PI;
-      const speed = 1.5 + Math.random() * 1.5; // px/frame
-      effects.push({
-        type: 'particle',
-        x, y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: LIFESPAN,
-        maxLife: LIFESPAN,
-      });
-    }
-  }
-
-  // ── 메인 업데이트 ─────────────────────────────────────────────────────────
   function update(dt) {
     if (gameOver) return;
 
-    // 이동
-    if (keys['ArrowLeft']  || keys['a']) player.x -= player.speed * dt / FRAME_REF;
-    if (keys['ArrowRight'] || keys['d']) player.x += player.speed * dt / FRAME_REF;
-    if (keys['ArrowUp']    || keys['w']) player.y -= player.speed * dt / FRAME_REF;
-    if (keys['ArrowDown']  || keys['s']) player.y += player.speed * dt / FRAME_REF;
-    player.x = Math.max(player.r, Math.min(canvas.width  - player.r, player.x));
-    player.y = Math.max(player.r, Math.min(canvas.height - player.r, player.y));
-
-    // 발사 쿨다운
+    if (powerUpMs > 0) powerUpMs -= dt;
     if (playerFireCooldownMs > 0) playerFireCooldownMs -= dt;
+    if (rightSkillCooldownMs > 0) rightSkillCooldownMs -= dt;
+    if (shieldActiveMs > 0) shieldActiveMs -= dt;
+    if (dashTrailMs > 0) dashTrailMs -= dt;
 
-    // 스페이스바 연사 (마우스 방향)
+    const speedMult = powerUpMs > 0 ? POWERUP_SPEED_MULT : 1;
+    const move = player.speed * speedMult * dt / FRAME_REF;
+    if (keys['ArrowLeft'] || keys['a']) player.x -= move;
+    if (keys['ArrowRight'] || keys['d']) player.x += move;
+    if (keys['ArrowUp'] || keys['w']) player.y -= move;
+    if (keys['ArrowDown'] || keys['s']) player.y += move;
+    player.x = clamp(player.x, player.r, canvas.width - player.r);
+    player.y = clamp(player.y, player.r, canvas.height - player.r);
+
     if (keys[' ']) firePlayerBullet(mouseX, mouseY);
 
-    // 적 탄환 스폰 — 생성 정책 함수 사용
     spawnTimerMs += dt;
-    if (spawnTimerMs >= spawnIntervalMs) {
+    if (!warningActive && !bossActive && spawnTimerMs >= spawnIntervalMs) {
       spawnTimerMs -= spawnIntervalMs;
-      spawnNormalBullets(); // 내부에서 25% 확률로 destructible 결정
+      spawnNormalBullets();
     }
     difficultyTimerMs += dt;
     if (difficultyTimerMs >= 5000) {
       difficultyTimerMs -= 5000;
-      spawnIntervalMs = Math.max(300, spawnIntervalMs - 50);
+      spawnIntervalMs = Math.max(NORMAL_SPAWN_MIN, spawnIntervalMs - 50);
     }
 
-    // 힐팩 스폰
-    const healThr = (score | 0) / 500 | 0;
-    if (healThr > lastHealthThreshold) {
+    const healThr = ((score | 0) / 500) | 0;
+    if (!warningActive && !bossActive && healThr > lastHealthThreshold) {
       lastHealthThreshold = healThr;
       healthPacks.push(new HealthPack());
     }
 
-    // 최대 HP 성장
-    const hpIncThr = (score | 0) / 2000 | 0;
+    const hpIncThr = ((score | 0) / 2000) | 0;
     if (hpIncThr > lastMaxHpThreshold) {
       lastMaxHpThreshold = hpIncThr;
       const inc = player.maxHp / 15;
-      player.maxHp += inc; player.hp += inc;
+      player.maxHp += inc;
+      player.hp += inc;
     }
 
     maybeSpawnBoss();
 
-    // 경고 타이머 — warningActive 중엔 경과 시간 누적, 완료 시 보스 스폰
     if (warningActive) {
       warningElapsedMs += dt;
       if (warningElapsedMs >= WARNING_DURATION) {
         warningActive = false;
-        warningDiv.style.display = 'none';
+        if (warningDiv) warningDiv.style.display = 'none';
         bossActive = true;
-        boss       = new Boss();
+        boss = new Boss(pendingBossType);
         if (bossUi) bossUi.style.display = 'block';
       }
     }
 
-    // 보스
     if (bossActive && boss) {
       boss.update(dt);
-      // 접촉 데미지
-      const dx = player.x - boss.x, dy = player.y - boss.y;
-      if (Math.abs(dx) <= boss.size / 2 + player.r && Math.abs(dy) <= boss.size / 2 + player.r) {
-        player.hp -= 0.2 * dt / FRAME_REF;
+      if (Math.abs(player.x - boss.x) <= boss.size / 2 + player.r && Math.abs(player.y - boss.y) <= boss.size / 2 + player.r) {
+        player.hp -= (player.maxHp / 15) * 0.15 * dt / FRAME_REF;
       }
-      // 보스 사망
       if (boss.hp <= 0) {
-        score     += BOSS_KILL_BONUS;
+        score += BOSS_KILL_BONUS;
+        const recoveredHp = Math.min(deletedHealthPacksForBoss * 2, 10);
+        if (recoveredHp > 0) player.hp = Math.min(player.maxHp, player.hp + recoveredHp);
+        deletedHealthPacksForBoss = 0;
+        awardBossPowerup();
         bossActive = false;
-        boss       = null;
+        boss = null;
+        bossCores = [];
         if (bossUi) bossUi.style.display = 'none';
       }
     }
 
-    // 적 탄환 이동
     bullets.forEach(b => b.update(dt));
-
-    // 플레이어 탄환 이동
     playerBullets.forEach(pb => pb.update(dt));
 
-    // ── playerBullet vs 보스 충돌 ──
+    for (const e of effects) {
+      e.life -= dt;
+      if (e.type === 'particle') {
+        e.x += e.vx * dt / FRAME_REF;
+        e.y += e.vy * dt / FRAME_REF;
+      }
+      if (e.type === 'shockwave' && e.damagesPlayer && !e.applied) {
+        const alpha = 1 - e.life / e.maxLife;
+        const currentR = e.maxRadius * alpha;
+        const dist = Math.hypot(player.x - e.x, player.y - e.y);
+        if (Math.abs(dist - currentR) < 8 + player.r) {
+          if (shieldActiveMs > 0) shieldActiveMs = 0;
+          else player.hp -= player.maxHp / 20;
+          e.applied = true;
+        }
+      }
+    }
+    effects = effects.filter(e => e.life > 0);
+
     if (bossActive && boss) {
       for (const pb of playerBullets) {
         if (!pb.alive) continue;
-        const dx = pb.x - boss.x, dy = pb.y - boss.y;
+        if (boss.waterHealActive) {
+          for (const core of bossCores) {
+            if (!core.alive) continue;
+            const dx = pb.x - core.x;
+            const dy = pb.y - core.y;
+            if (dx * dx + dy * dy < (pb.r + core.size * 0.8) ** 2) {
+              core.hit(pb.dmg);
+              pb.alive = false;
+              break;
+            }
+          }
+        }
+        if (!pb.alive) continue;
+        const dx = pb.x - boss.x;
+        const dy = pb.y - boss.y;
         if (Math.abs(dx) <= boss.size / 2 + pb.r && Math.abs(dy) <= boss.size / 2 + pb.r) {
           boss.hit(pb.dmg);
           pb.alive = false;
@@ -616,100 +1059,158 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // ── playerBullet vs destructible bullet 충돌 ──
-    // 제곱거리 비교 (sqrt 없음), destructible=false는 스킵
     for (const pb of playerBullets) {
       if (!pb.alive) continue;
       for (const b of bullets) {
         if (!b.alive || !b.destructible) continue;
-        const dx = pb.x - b.x, dy = pb.y - b.y;
+        const dx = pb.x - b.x;
+        const dy = pb.y - b.y;
         const rSum = pb.r + b.r;
         if (dx * dx + dy * dy < rSum * rSum) {
-          pb.alive = false; // 플레이어 탄환 1발 소멸 (관통 없음)
-          b.alive  = false; // 적 탄환 제거
+          pb.alive = false;
+          b.alive = false;
           spawnHitEffect(b.x, b.y);
-          break; // pb 소멸됨, 더 검사 불필요
+          break;
         }
       }
     }
 
-    // ── 플레이어 피격 (alive인 탄환만 체크) ──
     for (const b of bullets) {
       if (!b.alive) continue;
-      const dx = b.x - player.x, dy = b.y - player.y;
+      const dx = b.x - player.x;
+      const dy = b.y - player.y;
       const rSum = b.r + player.r;
       if (dx * dx + dy * dy < rSum * rSum) {
-        player.hp -= b.dmg;
-        b.alive = false;
+        if (shieldActiveMs > 0) {
+          shieldActiveMs = 0;
+          b.alive = false;
+          spawnShockwave(player.x, player.y, 40, '#ddf', 2);
+        } else {
+          player.hp -= b.dmg;
+          b.alive = false;
+        }
       }
     }
 
-    // ── 일괄 정리 (alive=false + 화면 밖) ──
-    bullets       = bullets.filter(b  => b.alive  && b.inBounds());
+    bullets = bullets.filter(b => b.alive && b.inBounds());
     playerBullets = playerBullets.filter(pb => pb.alive && pb.inBounds());
+    bossCores = bossCores.filter(c => c.alive);
 
-    // ── 이펙트 업데이트 ──
-    effects.forEach(e => e.life -= dt);
-    effects = effects.filter(e => e.life > 0);
-
-    // 힐팩
-    healthPacks.forEach((pack, i) => {
+    healthPacks = healthPacks.filter(pack => {
       if (Math.hypot(pack.x - player.x, pack.y - player.y) < pack.r + player.r) {
         const missing = player.maxHp - player.hp;
         player.hp = Math.min(player.maxHp, player.hp + missing * 0.1 + player.maxHp / 15);
-        healthPacks.splice(i, 1);
+        return false;
       }
+      return true;
     });
 
-    score += (dt / 1000) * SCORE_PER_SEC;
+    if (!bossActive && !warningActive) {
+      score += (dt / 1000) * SCORE_PER_SEC;
+    }
+
     updateHpBar();
-    updateBossHpBar();
-    scoreSpan.textContent = score | 0;
+    if (scoreSpan) scoreSpan.textContent = String(score | 0);
+    if (bossActive && boss) updateBossHpBar();
     if (player.hp <= 0) doGameOver();
   }
 
-  // ── 렌더링 ────────────────────────────────────────────────────────────────
+  function drawBackground() {
+    let bg = '#111';
+    if (bossActive && boss) bg = elementData[boss.type].bg;
+    else if (warningActive) bg = elementData[warningBossType].bg;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = (bossActive && boss) ? elementData[boss.type].border : '#333';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+  }
+
   function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
 
-    // 경계
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, 5);
-    ctx.fillRect(0, 0, 5, canvas.height);
-    ctx.fillRect(canvas.width - 5, 0, 5, canvas.height);
-    ctx.fillRect(0, canvas.height - 5, canvas.width, 5);
-
-    // 보스 스폰 예고 레티클 — warningActive 중에만 렌더
     if (warningActive) {
-      const cx = canvas.width  / 2;
+      const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      const progress = warningElapsedMs / WARNING_DURATION; // 0 → 1
-      // 링이 수축하며 스폰 지점으로 좁혀지는 연출
-      const ringR  = 80 * (1 - progress) + 20;
-      const alpha  = 0.4 + progress * 0.6; // 점점 진해짐
-      const pulse  = Math.sin(performance.now() / 80) * 0.15; // 미세 pulse
-
+      const progress = warningElapsedMs / WARNING_DURATION;
+      const ringR = 90 * (1 - progress) + 24;
+      const alpha = 0.4 + progress * 0.6;
       ctx.save();
-      ctx.globalAlpha  = Math.min(1, alpha + pulse);
-      ctx.strokeStyle  = '#f00';
-      ctx.lineWidth    = 2;
-      // 외부 링
-      ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, 2 * Math.PI); ctx.stroke();
-      // 십자선
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#f55';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      ctx.stroke();
       const armLen = ringR * 0.6;
       ctx.beginPath();
       ctx.moveTo(cx - armLen, cy); ctx.lineTo(cx + armLen, cy);
       ctx.moveTo(cx, cy - armLen); ctx.lineTo(cx, cy + armLen);
       ctx.stroke();
-      // 중앙 점
-      ctx.fillStyle   = '#f00';
-      ctx.globalAlpha = alpha;
-      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, 2 * Math.PI); ctx.fill();
       ctx.restore();
     }
-    ctx.beginPath(); ctx.arc(player.x, player.y, player.r / 2, 0, 2 * Math.PI); ctx.fill();
 
-    // 조준선 (마우스 방향)
+    healthPacks.forEach(h => h.draw());
+    bossCores.forEach(c => c.draw());
+    playerBullets.forEach(pb => pb.draw());
+    bullets.forEach(b => b.draw());
+    if (bossActive && boss) boss.draw();
+
+    effects.forEach(e => {
+      const alpha = Math.max(0, e.life / e.maxLife);
+      if (e.type === 'ring') {
+        const r = (1 - alpha) * e.radius + 3;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.9;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      } else if (e.type === 'particle') {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (e.type === 'shockwave') {
+        const t = 1 - alpha;
+        const r = e.maxRadius * t;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = e.lineWidth;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+
+    if (dashTrailMs > 0) {
+      ctx.save();
+      ctx.globalAlpha = dashTrailMs / 180 * 0.5;
+      ctx.fillStyle = '#9ff';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r + 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (shieldActiveMs > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = '#ccf';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r + 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.strokeStyle = 'rgba(150,150,255,0.25)';
     ctx.setLineDash([4, 6]);
@@ -720,58 +1221,45 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.stroke();
     ctx.restore();
 
-    // ── 이펙트 업데이트 (위치 이동) ──
-    // update()에서 life 감소는 했고, 여기서 particle 이동
-    effects.forEach(e => {
-      if (e.type === 'particle') {
-        e.x += e.vx;
-        e.y += e.vy;
-      }
-    });
+    ctx.save();
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
-    if (bossActive && boss) boss.draw();
-    healthPacks.forEach(hp => hp.draw());
-    playerBullets.forEach(pb => pb.draw());
-    bullets.forEach(b => b.draw());
+    const skill = getSelectedSkill();
+    const cooldownSec = Math.max(0, rightSkillCooldownMs) / 1000;
+    const ready = rightSkillCooldownMs <= 0;
+    const skillText = `우클릭: ${skill.name} ${ready ? '(준비)' : `(${cooldownSec.toFixed(1)}s)`}`;
 
-    // ── 이펙트 렌더 (탄환 위에 그려야 잘 보임) ──
-    effects.forEach(e => {
-      const alpha = e.life / e.maxLife; // 1.0 → 0.0 선형 감소
-      if (e.type === 'ring') {
-        // 반경: 수명 남을수록 작음 → 커짐
-        const r = (1 - alpha) * 12 + 3;
-        ctx.save();
-        ctx.globalAlpha  = alpha * 0.9;
-        ctx.strokeStyle  = '#afffaf'; // 초록 계열 링
-        ctx.lineWidth    = 1.5;
-        ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, 2 * Math.PI); ctx.stroke();
-        ctx.restore();
-      } else {
-        // particle: 작은 흰 점
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle   = '#fff';
-        ctx.beginPath(); ctx.arc(e.x, e.y, 2, 0, 2 * Math.PI); ctx.fill();
-        ctx.restore();
-      }
-    });
+    if (skillHud) {
+      skillHud.textContent = skillText;
+      skillHud.style.borderColor = ready ? '#7fd3ff' : '#ffcf66';
+      skillHud.style.color = ready ? '#dff6ff' : '#ffe8a3';
+    }
   }
 
-  // ── 게임 루프 ─────────────────────────────────────────────────────────────
   function loop(time) {
     if (!lastTime) lastTime = time;
     const dt = Math.min(50, time - lastTime);
     lastTime = time;
-    update(dt); draw();
+    update(dt);
+    draw();
     if (!gameOver) requestAnimationFrame(loop);
   }
 
-  // ── 이벤트 ────────────────────────────────────────────────────────────────
   window.addEventListener('keydown', e => {
     keys[e.key] = true;
     if (e.key === ' ') e.preventDefault();
   });
-  window.addEventListener('keyup', e => { keys[e.key] = false; });
+  window.addEventListener('keyup', e => {
+    keys[e.key] = false;
+  });
 
   canvas.addEventListener('mousemove', e => {
     const rect = canvas.getBoundingClientRect();
@@ -784,19 +1272,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left;
     mouseY = e.clientY - rect.top;
-    firePlayerBullet(mouseX, mouseY);
+    if (e.button === 0) {
+      firePlayerBullet(mouseX, mouseY);
+    }
   });
 
-  btnStart.addEventListener('click', () => { initGame(); requestAnimationFrame(loop); });
-  btnRetry.addEventListener('click', () => {
-    menu.style.display = 'block'; ui.style.display = 'none';
-    canvas.style.display = 'none'; gameOverScreen.style.display = 'none';
+  canvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+    useRightSkill();
+  });
+
+  btnStart?.addEventListener('click', () => {
+    initGame();
+    requestAnimationFrame(loop);
+  });
+  btnRetry?.addEventListener('click', () => {
+    if (menu) menu.style.display = 'block';
+    if (ui) ui.style.display = 'none';
+    canvas.style.display = 'none';
+    if (gameOverScreen) gameOverScreen.style.display = 'none';
     gameOver = false;
   });
-  submitBtn.addEventListener('click', handleSubmit);
+  submitBtn?.addEventListener('click', handleSubmit);
 
-  menu.style.display           = 'block';
-  ui.style.display             = 'none';
-  canvas.style.display         = 'none';
-  gameOverScreen.style.display = 'none';
+  if (menu) menu.style.display = 'block';
+  if (ui) ui.style.display = 'none';
+  canvas.style.display = 'none';
+  if (gameOverScreen) gameOverScreen.style.display = 'none';
 });

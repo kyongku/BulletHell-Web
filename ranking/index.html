@@ -3,220 +3,265 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Core Tempest - 리더보드</title>
+  <title>Core Tempest Leaderboard</title>
   <style>
+    :root {
+      --bg: #07090d;
+      --panel: #11161f;
+      --panel-2: #171e29;
+      --line: #2a3444;
+      --text: #eef3ff;
+      --muted: #9fb0c9;
+      --accent: #7fd3ff;
+      --gold: #f7c948;
+      --silver: #cfd6e6;
+      --bronze: #d28b5f;
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #000;
-      color: #fff;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #111827 0%, var(--bg) 45%, #050608 100%);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
     }
     .wrap {
       max-width: 900px;
       margin: 0 auto;
-      padding: 32px 20px 48px;
+      padding: 32px 16px 48px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
     }
     h1 {
-      text-align: center;
-      margin: 0 0 12px;
-      font-size: 42px;
+      margin: 0;
+      font-size: 36px;
+      letter-spacing: .3px;
     }
-    p.desc {
-      text-align: center;
-      color: #bbb;
-      margin: 0 0 28px;
+    .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
     }
     .actions {
       display: flex;
-      gap: 12px;
-      justify-content: center;
-      margin-bottom: 24px;
+      gap: 10px;
       flex-wrap: wrap;
     }
     button, a.btn {
-      background: #111;
-      color: #fff;
-      border: 1px solid #666;
-      padding: 10px 16px;
-      font-size: 16px;
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 10px;
       cursor: pointer;
       text-decoration: none;
-    }
-    button:hover, a.btn:hover {
-      border-color: #aaa;
-    }
-    .panel {
-      border: 1px solid #444;
-      background: #0a0a0a;
-      padding: 16px;
-    }
-    .note {
-      color: #8fd3ff;
-      margin-bottom: 14px;
       font-size: 14px;
     }
+    button:hover, a.btn:hover { border-color: var(--accent); }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 14px 36px rgba(0,0,0,.28);
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+    }
+    .status { color: var(--muted); font-size: 14px; }
     table {
       width: 100%;
       border-collapse: collapse;
-      table-layout: fixed;
     }
     th, td {
-      border-bottom: 1px solid #222;
-      padding: 12px 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
       text-align: left;
-      word-break: break-word;
+      font-size: 15px;
     }
-    th:nth-child(1), td:nth-child(1) { width: 70px; text-align: center; }
-    th:nth-child(3), td:nth-child(3) { width: 140px; text-align: right; }
-    th:nth-child(4), td:nth-child(4) { width: 220px; text-align: center; }
-    .muted { color: #999; }
-    .center { text-align: center; }
-    .error { color: #ff8d8d; }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      background: rgba(255,255,255,.02);
+    }
+    td.rank {
+      width: 84px;
+      font-weight: 700;
+    }
+    td.score {
+      width: 140px;
+      font-weight: 700;
+    }
+    tr:nth-child(1) td.rank { color: var(--gold); }
+    tr:nth-child(2) td.rank { color: var(--silver); }
+    tr:nth-child(3) td.rank { color: var(--bronze); }
+    .empty, .error {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .error { color: #ff9e9e; }
+    .foot {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    code {
+      color: var(--accent);
+      background: rgba(255,255,255,.04);
+      padding: 1px 5px;
+      border-radius: 6px;
+    }
+    @media (max-width: 640px) {
+      h1 { font-size: 28px; }
+      th:nth-child(4), td:nth-child(4) { display: none; }
+      td.rank { width: 60px; }
+      td.score { width: 110px; }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>리더보드</h1>
-    <p class="desc">같은 이름은 최고 점수 1개만 표시됩니다.</p>
-
-    <div class="actions">
-      <button id="refreshBtn">새로고침</button>
-      <a class="btn" href="../">메인으로</a>
+    <div class="topbar">
+      <div>
+        <h1>리더보드</h1>
+        <div class="sub">Core Tempest / BulletHell-Web 최고 점수</div>
+      </div>
+      <div class="actions">
+        <button id="btnRefresh" type="button">새로고침</button>
+        <a class="btn" href="../">게임으로 돌아가기</a>
+      </div>
     </div>
 
-    <div class="panel">
-      <div class="note">정렬 기준: 이름별 최고 점수 1개만 반영, 점수 내림차순</div>
-      <div id="status" class="muted">불러오는 중...</div>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>이름</th>
-            <th>점수</th>
-            <th>기록 시간</th>
-          </tr>
-        </thead>
-        <tbody id="leaderboardBody"></tbody>
-      </table>
+    <div class="card">
+      <div class="card-head">
+        <div>상위 기록</div>
+        <div id="status" class="status">불러오는 중...</div>
+      </div>
+      <div id="tableWrap">
+        <div class="empty">불러오는 중...</div>
+      </div>
+    </div>
+
+    <div class="foot">
+      Firestore <code>bestScores</code> 컬렉션을 읽는다. 같은 이름은 DB에서 최고점 1문서만 유지하는 전제이며,
+      표시 이름은 <code>name</code> 필드를 우선 사용한다.
     </div>
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      getDocs,
-      query,
-      orderBy,
-      limit
-    } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
+    import { getFirestore, collection, getDocs, orderBy, query, limit } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
     const firebaseConfig = {
-      apiKey: "AIzaSyA65hHD3pzh8Jv91xBWxMOK_FG9j8vNL2o",
-      authDomain: "core-tempest-11588.firebaseapp.com",
-      projectId: "core-tempest-11588",
-      storageBucket: "core-tempest-11588.firebasestorage.app",
-      messagingSenderId: "343743820806",
-      appId: "1:343743820806:web:41391a57902093fea57f87",
-      measurementId: "G-4P8SZVSN3Q"
+      apiKey: 'AIzaSyA65hHD3pzh8Jv91xBWxMOK_FG9j8vNL2o',
+      authDomain: 'core-tempest-11588.firebaseapp.com',
+      projectId: 'core-tempest-11588',
+      storageBucket: 'core-tempest-11588.firebasestorage.app',
+      messagingSenderId: '343743820806',
+      appId: '1:343743820806:web:41391a57902093fea57f87',
+      measurementId: 'G-4P8SZVSN3Q'
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const bodyEl = document.getElementById("leaderboardBody");
-    const statusEl = document.getElementById("status");
-    const refreshBtn = document.getElementById("refreshBtn");
+    const statusEl = document.getElementById('status');
+    const tableWrap = document.getElementById('tableWrap');
+    document.getElementById('btnRefresh').addEventListener('click', loadLeaderboard);
 
     function formatDate(value) {
-      if (!value) return "-";
+      if (!value) return '-';
       try {
-        if (value.toDate) return value.toDate().toLocaleString("ko-KR");
-        if (typeof value === "string" || typeof value === "number") {
-          return new Date(value).toLocaleString("ko-KR");
-        }
-      } catch (_) {}
-      return "-";
-    }
-
-    function getDisplayName(data) {
-      const raw = (data.name ?? data.userId ?? "익명").toString().trim();
-      return raw || "익명";
-    }
-
-    function getNameKey(name) {
-      return name.trim().toLowerCase();
-    }
-
-    async function loadLeaderboard() {
-      statusEl.textContent = "불러오는 중...";
-      statusEl.className = "muted";
-      bodyEl.innerHTML = "";
-
-      try {
-        const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(300));
-        const snap = await getDocs(q);
-
-        const bestByName = new Map();
-
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          const displayName = getDisplayName(data);
-          const nameKey = getNameKey(displayName);
-          const score = Number(data.score ?? 0);
-          const createdAt = data.createdAt ?? null;
-
-          if (!bestByName.has(nameKey)) {
-            bestByName.set(nameKey, { displayName, score, createdAt });
-            return;
-          }
-
-          const prev = bestByName.get(nameKey);
-          if (score > prev.score) {
-            bestByName.set(nameKey, { displayName, score, createdAt });
-          } else if (score === prev.score) {
-            const prevTime = prev.createdAt?.toDate ? prev.createdAt.toDate().getTime() : 0;
-            const newTime = createdAt?.toDate ? createdAt.toDate().getTime() : 0;
-            if (newTime > prevTime) {
-              bestByName.set(nameKey, { displayName, score, createdAt });
-            }
-          }
+        const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+        return date.toLocaleString('ko-KR', {
+          month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
         });
-
-        const rows = Array.from(bestByName.values())
-          .sort((a, b) => {
-            if (b.score !== a.score) return b.score - a.score;
-            const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-            const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-            return bTime - aTime;
-          })
-          .slice(0, 50);
-
-        if (!rows.length) {
-          statusEl.textContent = "아직 기록이 없습니다.";
-          bodyEl.innerHTML = '<tr><td colspan="4" class="center muted">표시할 점수가 없습니다.</td></tr>';
-          return;
-        }
-
-        statusEl.textContent = `총 ${rows.length}명 표시 중`;
-        bodyEl.innerHTML = rows.map((row, idx) => `
-          <tr>
-            <td>${idx + 1}</td>
-            <td>${row.displayName}</td>
-            <td>${row.score}</td>
-            <td>${formatDate(row.createdAt)}</td>
-          </tr>
-        `).join("");
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = "리더보드를 불러오지 못했습니다.";
-        statusEl.className = "error";
-        bodyEl.innerHTML = '<tr><td colspan="4" class="center error">불러오기 실패</td></tr>';
+      } catch {
+        return '-';
       }
     }
 
-    refreshBtn.addEventListener("click", loadLeaderboard);
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function loadLeaderboard() {
+      statusEl.textContent = '불러오는 중...';
+      tableWrap.innerHTML = '<div class="empty">불러오는 중...</div>';
+      try {
+        const q = query(collection(db, 'bestScores'), orderBy('score', 'desc'), limit(50));
+        const snap = await getDocs(q);
+        const rows = [];
+        snap.forEach((doc) => {
+          const data = doc.data() || {};
+          rows.push({
+            name: data.name || data.userId || doc.id || '익명',
+            score: Number(data.score || 0),
+            updatedAt: data.updatedAt || data.createdAt || null,
+          });
+        });
+
+        if (!rows.length) {
+          tableWrap.innerHTML = '<div class="empty">아직 기록이 없다.</div>';
+          statusEl.textContent = '기록 0개';
+          return;
+        }
+
+        const tbody = rows.map((row, idx) => {
+          return `
+            <tr>
+              <td class="rank">#${idx + 1}</td>
+              <td>${escapeHtml(row.name)}</td>
+              <td class="score">${row.score.toLocaleString('ko-KR')}</td>
+              <td>${formatDate(row.updatedAt)}</td>
+            </tr>
+          `;
+        }).join('');
+
+        tableWrap.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>이름</th>
+                <th>점수</th>
+                <th>갱신 시각</th>
+              </tr>
+            </thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        `;
+        statusEl.textContent = `기록 ${rows.length}개`;
+      } catch (err) {
+        console.error(err);
+        tableWrap.innerHTML = `<div class="error">리더보드를 불러오지 못했다.<br>${escapeHtml(err.message || String(err))}</div>`;
+        statusEl.textContent = '불러오기 실패';
+      }
+    }
+
     loadLeaderboard();
   </script>
 </body>
