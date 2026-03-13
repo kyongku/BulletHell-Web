@@ -364,6 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let mouseX       = canvas.width  / 2;
   let mouseY       = canvas.height / 2;
   let playerFireCooldownMs = 0;
+  let isMouseDown = false;  // 좌클릭 꾹 누르기 지속 발사용
   let powerUpMs    = 0;
   let dashTrailMs  = 0;
 
@@ -735,8 +736,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Wind boss: defense scales with living minion count (10% per minion)
       let defMult = this.data.defenseMultiplier;
       if (this.data.isWind) {
-        const living = windMinions.filter(m => m.alive).length;
-        defMult = living * 0.10;  // 5마리=50%, 1마리=10%, 0마리=0%
+        if (!this.windMinionSpawned) {
+          // 미니언 소환 전: 방어 없음 (defMult 1.0)
+          defMult = 1.0;
+        } else {
+          // 소환 후: 살아있는 미니언 수 × 10%
+          const living = windMinions.filter(m => m.alive).length;
+          defMult = living * 0.10;  // 5마리=50%, 0마리=0%
+        }
       }
       const actualDmg = rawDmg * defMult;
       this.hp -= actualDmg;
@@ -1499,7 +1506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pendingBossData=null;pendingBossLabel='';
     lastBossScoreThreshold=0;
     lastHealthThreshold=0;lastMaxHpThreshold=0;deletedHpPacks=0;
-    playerFireCooldownMs=0;powerUpMs=0;dashTrailMs=0;
+    playerFireCooldownMs=0;powerUpMs=0;dashTrailMs=0;isMouseDown=false;
     skillCooldowns={};skillActiveMs={};
     parryWindowMs=0;parryWindowUsed=false;
     isSubmittingScore=false;scoreSubmitted=false;
@@ -1593,7 +1600,7 @@ document.addEventListener('DOMContentLoaded', () => {
     player.x = clamp(player.x, player.r, canvas.width -player.r);
     player.y = clamp(player.y, player.r, canvas.height-player.r);
 
-    if (keys[' ']) firePlayerBullet(mouseX, mouseY);
+    if (keys[' '] || isMouseDown) firePlayerBullet(mouseX, mouseY);
 
     // Normal bullet spawner (only outside boss fights)
     spawnTimerMs += dt;
@@ -1876,6 +1883,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   window.addEventListener('keyup', e => { keys[e.key]=false; });
+  // 포커스 이탈 시 모든 키 상태 초기화 (WASD 고착 방지)
+  window.addEventListener('blur', () => { keys = {}; });
 
   canvas.addEventListener('mousemove', e => {
     const r=canvas.getBoundingClientRect();
@@ -1885,9 +1894,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gameOver) return;
     const r=canvas.getBoundingClientRect();
     mouseX=e.clientX-r.left; mouseY=e.clientY-r.top;
-    if (e.button===0) firePlayerBullet(mouseX,mouseY);
+    if (e.button===0) { isMouseDown=true; firePlayerBullet(mouseX,mouseY); }
     if (e.button===2) useSkill(getSelectedSkill());
   });
+  canvas.addEventListener('mouseup', e => {
+    if (e.button===0) isMouseDown=false;
+  });
+  // 캔버스 밖으로 나가도 해제
+  canvas.addEventListener('mouseleave', () => { isMouseDown=false; });
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); });
 
   btnStart?.addEventListener('click', () => { initGame(); requestAnimationFrame(loop); });
