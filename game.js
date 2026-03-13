@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
       burstInterval: 700, burstSpeed: 2.6, burstCount: 18, burstDestructRatio: 0.22,
       spiralInterval: 30, spiralSpeed: 3.3,   // faster spiral
       aimedInterval: 320, aimedShots: 4, aimedDelay: 65, aimedSpeed: 3.55,
-      orbitRadius: 140, chaseSpeed: 110, zigSpeed: 155,  // very fast movement
+      orbitRadius: 140, chaseSpeed: 70, zigSpeed: 120,  // very fast movement
       homing: 0.05, defenseMultiplier: 1.0,
       // wind-specific: laser telegraph fires every 1300ms
       laserInterval: 1000,
@@ -1075,22 +1075,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ─── Wind minions ────────────────────────────────────────────────
-  // 5마리 소환. 각자 HP와 공격력 보유.
+  // 3마리 소환. 각자 HP와 공격력 보유.
   // 보스 방어율 = 살아있는 미니언 수 × 10% (boss.hit()에서 처리)
   function spawnWindMinions() {
     windMinions = [];
     const bossDmg = player.maxHp / 20;
-    // 5마리를 보스 주변 원형 배치
-    for (let i = 0; i < 5; i++) {
-      const ang = (Math.PI * 2 * i) / 5;
+    // 3마리를 보스 주변 원형 배치
+    for (let i = 0; i < 3; i++) {
+      const ang = (Math.PI * 2 * i) / 3;
       const dist = 140;
       windMinions.push({
         x:    boss.x + Math.cos(ang) * dist,
         y:    boss.y + Math.sin(ang) * dist,
         vx:   Math.cos(ang + Math.PI/2) * 1.8,  // 초기 선회 속도
         vy:   Math.sin(ang + Math.PI/2) * 1.8,
-        hp:   120,
-        maxHp: 120,
+        hp:   20,
+        maxHp: 20,
         atk:  bossDmg,
         r:    12,
         fireTickMs: 800 + i * 200,  // 스폰 즉시 일제 발사 방지
