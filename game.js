@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ELECTRIC_LINK_INTERVAL = 2500; // ms between link pulses
   const PARRY_WINDOW_START   = 100;    // ms after cast when parry window opens
   const PARRY_WINDOW_END     = 350;    // ms after cast when parry window closes
-  const PARRY_CD_REDUCTION   = 0.70;   // 70% cooldown cut on perfect parry
+  const PARRY_CD_REDUCTION   = 0.90;   // 90% cooldown cut on perfect parry
 
   // ─── Boss element definitions ────────────────────────────────────
   // Each entry defines colors, stats, and behavior multipliers.
@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'teleport',  name: '공간도약', desc: '마우스 방향 순간이동',           cooldown: 6000  },
     { id: 'fluid',     name: '유체화',   desc: '3s 피해 50% 감소',               cooldown: 12000 },
     { id: 'overcharge',name: '과부하',   desc: '4s 데미지 2배',                  cooldown: 14000 },
-    { id: 'parry',     name: '패링',     desc: '0.1s 후 피격 시 쿨타임 70% 감소', cooldown: 8000  },
+    { id: 'parry',     name: '패링',     desc: '0.1s 후 피격 시 쿨타임 90% 감소 + 주변 탄 제거', cooldown: 5000  },
     { id: 'barrier',   name: '장벽',     desc: '0.6s 완전 피격 무효화',           cooldown: 10000 },
   ];
 
@@ -1531,7 +1531,17 @@ document.addEventListener('DOMContentLoaded', () => {
         parryWindowUsed = true;
         const reducedCd = SKILLS.find(s=>s.id==='parry').cooldown * (1 - PARRY_CD_REDUCTION);
         skillCooldowns['parry'] = reducedCd;
-        spawnShockwave(player.x, player.y, 60, '#ffe566', 3);
+
+        // 반경 180px 이내 적 탄 전부 제거
+        const PARRY_CLEAR_R = 180;
+        bullets = bullets.filter(b => {
+          const dist = Math.hypot(b.x - player.x, b.y - player.y);
+          return dist > PARRY_CLEAR_R;
+        });
+
+        // 시각 효과: 쇼크웨이브 2개 (내부 + 외부)
+        spawnShockwave(player.x, player.y, PARRY_CLEAR_R, '#ffe566', 4);
+        spawnShockwave(player.x, player.y, 55, '#ffffff', 3);
         spawnHitEffect(player.x, player.y, '#ffe566');
         return;
       }
