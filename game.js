@@ -1424,6 +1424,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bossActive=false; boss=null; bossCores=[];
         fireZones=[]; earthWalls=null; windTelegraphs=[];
         electricOrbs=[]; electricLinks=[];
+        bullets=[];
         if (bossUi) bossUi.style.display='none';
       }
     }
