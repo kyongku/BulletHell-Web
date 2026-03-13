@@ -255,9 +255,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── Skins ───────────────────────────────────────────────────────
   const skins = [
-    { color: '#ff0',  cost: 0 },
-    { color: '#0f0',  cost: 5000 },
-    { color: '#fff',  cost: 10000 },
+    { color: '#ffe566', label: '기본', cost: 0,     skill: 'teleport'   },
+    { color: '#66ff99', label: '초록', cost: 3000,  skill: 'barrier'    },
+    { color: '#66ccff', label: '하늘', cost: 5000,  skill: 'fluid'      },
+    { color: '#ff6699', label: '분홍', cost: 7000,  skill: 'parry'      },
+    { color: '#cc66ff', label: '보라', cost: 10000, skill: 'overcharge' },
+    { color: '#ff9944', label: '주황', cost: 14000, skill: 'parry'      },
+    { color: '#ffffff', label: '백색', cost: 20000, skill: 'teleport'   },
   ];
 
   // ─── State variables ─────────────────────────────────────────────
