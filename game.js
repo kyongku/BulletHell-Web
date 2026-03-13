@@ -1498,6 +1498,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bullets=[];playerBullets=[];healthPacks=[];effects=[];
     bossCores=[];fireZones=[];earthWalls=null;windTelegraphs=[];
     electricOrbs=[];electricLinks=[];
+    windMinions=[];windSlowActive=false;
     score=0;gameOver=false;
     spawnIntervalMs=NORMAL_SPAWN_START;spawnTimerMs=0;difficultyTimerMs=0;
     bossKillCount=0;cycle1BossOrder=[];cycle2Queue=[];cycle3Queue=[];
@@ -1660,7 +1661,6 @@ document.addEventListener('DOMContentLoaded', () => {
         bossActive=false; boss=null; bossCores=[];
         fireZones=[]; earthWalls=null; windTelegraphs=[];
         electricOrbs=[]; electricLinks=[];
-    windMinions=[]; windSlowActive=false;
         windMinions=[]; windSlowActive=false;
         bullets=[];
         if (bossUi) bossUi.style.display='none';
