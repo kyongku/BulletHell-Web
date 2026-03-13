@@ -740,9 +740,10 @@ document.addEventListener('DOMContentLoaded', () => {
           // 미니언 소환 전: 방어 없음 (defMult 1.0)
           defMult = 1.0;
         } else {
-          // 소환 후: 살아있는 미니언 수 × 10%
+          // 소환 후: 마리당 방어율 20%, 받는 데미지 = rawDmg × (1 - 마리수×0.20)
+          // 3마리=40% 데미지(60% 방어), 2마리=60%, 1마리=80%, 0마리=100%
           const living = windMinions.filter(m => m.alive).length;
-          defMult = living * 0.10;  // 5마리=50%, 0마리=0%
+          defMult = 1.0 - (living * 0.20);
         }
       }
       const actualDmg = rawDmg * defMult;
