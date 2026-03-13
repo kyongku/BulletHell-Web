@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
       burstInterval: 700, burstSpeed: 2.6, burstCount: 18, burstDestructRatio: 0.22,
       spiralInterval: 30, spiralSpeed: 3.3,   // faster spiral
       aimedInterval: 320, aimedShots: 4, aimedDelay: 65, aimedSpeed: 3.55,
-      orbitRadius: 140, chaseSpeed: 70, zigSpeed: 120,  // very fast movement
+      orbitRadius: 140, chaseSpeed: 58, zigSpeed: 80,  // capped near player speed
       homing: 0.05, defenseMultiplier: 1.0,
       // wind-specific: laser telegraph fires every 1300ms
       laserInterval: 1000,
@@ -811,7 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.updatePhase();
       // Wind enrage: boost boss movement multiplier after trigger
-      this._speedBoost = (this.data.isWind && this.windEnraged) ? 1.55 : 1.0;
+      this._speedBoost = (this.data.isWind && this.windEnraged) ? 1.20 : 1.0;
       this.moveAngle  += dt / 1000;
       this.fireTickMs += dt;
 
@@ -1075,12 +1075,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ─── Wind minions ────────────────────────────────────────────────
-  // 3마리 소환. 각자 HP와 공격력 보유.
+  // 5마리 소환. 각자 HP와 공격력 보유.
   // 보스 방어율 = 살아있는 미니언 수 × 10% (boss.hit()에서 처리)
   function spawnWindMinions() {
     windMinions = [];
     const bossDmg = player.maxHp / 20;
-    // 3마리를 보스 주변 원형 배치
+    // 5마리를 보스 주변 원형 배치
     for (let i = 0; i < 3; i++) {
       const ang = (Math.PI * 2 * i) / 3;
       const dist = 140;
@@ -1089,8 +1089,8 @@ document.addEventListener('DOMContentLoaded', () => {
         y:    boss.y + Math.sin(ang) * dist,
         vx:   Math.cos(ang + Math.PI/2) * 1.8,  // 초기 선회 속도
         vy:   Math.sin(ang + Math.PI/2) * 1.8,
-        hp:   20,
-        maxHp: 20,
+        hp:   120,
+        maxHp: 120,
         atk:  bossDmg,
         r:    12,
         fireTickMs: 800 + i * 200,  // 스폰 즉시 일제 발사 방지
@@ -1886,14 +1886,25 @@ document.addEventListener('DOMContentLoaded', () => {
   // 포커스 이탈 시 모든 키 상태 초기화 (WASD 고착 방지)
   window.addEventListener('blur', () => { keys = {}; });
 
+  function getCanvasMouse(e) {
+    const r = canvas.getBoundingClientRect();
+    // CSS 스케일링 보정: canvas 내부 해상도 기준 좌표로 변환
+    const scaleX = canvas.width  / r.width;
+    const scaleY = canvas.height / r.height;
+    return {
+      x: (e.clientX - r.left) * scaleX,
+      y: (e.clientY - r.top)  * scaleY,
+    };
+  }
+
   canvas.addEventListener('mousemove', e => {
-    const r=canvas.getBoundingClientRect();
-    mouseX=e.clientX-r.left; mouseY=e.clientY-r.top;
+    const m = getCanvasMouse(e);
+    mouseX = m.x; mouseY = m.y;
   });
   canvas.addEventListener('mousedown', e => {
     if (gameOver) return;
-    const r=canvas.getBoundingClientRect();
-    mouseX=e.clientX-r.left; mouseY=e.clientY-r.top;
+    const m = getCanvasMouse(e);
+    mouseX = m.x; mouseY = m.y;
     if (e.button===0) { isMouseDown=true; firePlayerBullet(mouseX,mouseY); }
     if (e.button===2) useSkill(getSelectedSkill());
   });
