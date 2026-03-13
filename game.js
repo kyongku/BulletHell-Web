@@ -365,6 +365,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let mouseY       = canvas.height / 2;
   let playerFireCooldownMs = 0;
   let isMouseDown = false;  // 좌클릭 꾹 누르기 지속 발사용
+
+  // ─── 플레이어 누적 강화 스탯 ────────────────────────────────────
+  // 보스 처치 시 누적, 게임 재시작 시 초기화
+  let playerStats = {
+    defense:   0,    // 방어율(%), 상한 50
+    speedBonus:0,    // 이속 추가량, 상한 PLAYER_BASE_SPEED * 0.5
+    fireCdBonus:0,   // 공속 감소량(ms 누적), 하한 적용은 firePlayerBullet에서
+    dmgBonus:  0,    // 공격력 추가량
+    hpBonus:   0,    // maxHp 추가량
+  };
   let powerUpMs    = 0;
   let dashTrailMs  = 0;
 
@@ -375,8 +385,91 @@ document.addEventListener('DOMContentLoaded', () => {
   let isSubmittingScore = false;
   let scoreSubmitted    = false;
 
+  // 강화 토스트
+  let statToast = null;  // { text, alpha, lifeMs, maxLifeMs }
+
   // ─── Utility ─────────────────────────────────────────────────────
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  // ─── 보스 처치 강화 추첨 ─────────────────────────────────────────
+  const STAT_UPGRADES = [
+    {
+      id: 'defense',
+      label: '방어력',
+      canApply: () => playerStats.defense < 50,
+      apply:    () => { playerStats.defense = Math.min(50, playerStats.defense + 10); },
+      getValue: () => `+10% (총 ${playerStats.defense}%)`,
+    },
+    {
+      id: 'speed',
+      label: '이동속도',
+      canApply: () => playerStats.speedBonus < PLAYER_BASE_SPEED * 0.5,
+      apply:    () => { playerStats.speedBonus = Math.min(PLAYER_BASE_SPEED * 0.5, playerStats.speedBonus + 0.35); },
+      getValue: () => `+이동속도`,
+    },
+    {
+      id: 'firecd',
+      label: '공격속도',
+      canApply: () => playerStats.fireCdBonus < (PLAYER_FIRE_CD - 50),
+      apply:    () => { playerStats.fireCdBonus = Math.min(PLAYER_FIRE_CD - 50, playerStats.fireCdBonus + 15); },
+      getValue: () => `+공격속도`,
+    },
+    {
+      id: 'dmg',
+      label: '공격력',
+      canApply: () => true,
+      apply:    () => { playerStats.dmgBonus += 8; },
+      getValue: () => `+공격력`,
+    },
+    {
+      id: 'hp',
+      label: '체력',
+      canApply: () => true,
+      apply:    () => {
+        player.maxHp += 20;
+        player.hp = Math.min(player.maxHp, player.hp + 20);
+      },
+      getValue: () => `+체력`,
+    },
+  ];
+
+  function rollStatUpgrade() {
+    // 한계치 초과 항목 제외 후 랜덤 선택, 최대 10회 재시도
+    const available = STAT_UPGRADES.filter(s => s.canApply());
+    if (available.length === 0) return; // 모든 스탯 만렙 (사실상 불가)
+    const chosen = available[(Math.random() * available.length) | 0];
+    chosen.apply();
+    showStatToast(`+${chosen.label}`);
+  }
+
+  function showStatToast(text) {
+    statToast = { text, alpha: 1.0, lifeMs: 1800, maxLifeMs: 1800 };
+  }
+
+  function updateStatToast(dt) {
+    if (!statToast) return;
+    statToast.lifeMs -= dt;
+    // 마지막 600ms 동안 페이드 아웃
+    if (statToast.lifeMs <= 600) {
+      statToast.alpha = statToast.lifeMs / 600;
+    }
+    if (statToast.lifeMs <= 0) statToast = null;
+  }
+
+  function drawStatToast() {
+    if (!statToast) return;
+    ctx.save();
+    ctx.globalAlpha = statToast.alpha;
+    ctx.font = 'bold 28px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // 텍스트 그림자
+    ctx.fillStyle = '#000';
+    ctx.fillText(statToast.text, canvas.width/2 + 1, canvas.height/2 - 59);
+    ctx.fillStyle = '#ffe566';
+    ctx.fillText(statToast.text, canvas.width/2, canvas.height/2 - 60);
+    ctx.restore();
+  }
 
   // ─── Boss sequence helpers ────────────────────────────────────────
 
@@ -1318,10 +1411,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const dx = tx - player.x, dy = ty - player.y;
     const len = Math.hypot(dx,dy) || 1;
     const spd = 8.5;
-    const baseDmg = PLAYER_BULLET_DMG;
+    const baseDmg = PLAYER_BULLET_DMG + playerStats.dmgBonus;
     const dmg = (skillActiveMs['overcharge']||0) > 0 ? baseDmg * 2 : baseDmg;
     playerBullets.push(new PlayerBullet(player.x, player.y, (dx/len)*spd, (dy/len)*spd, dmg));
-    playerFireCooldownMs = (powerUpMs > 0) ? POWERUP_FIRE_CD : PLAYER_FIRE_CD;
+    // 공속 보너스 반영 (하한 50ms)
+    const baseCD = (powerUpMs > 0) ? POWERUP_FIRE_CD : PLAYER_FIRE_CD;
+    playerFireCooldownMs = Math.max(50, baseCD - playerStats.fireCdBonus);
   }
 
   // ─── Normal bullet spawn ──────────────────────────────────────────
@@ -1442,8 +1537,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     // Fluid: 50% reduction
-    const reduction = (skillActiveMs['fluid']||0) > 0 ? 0.5 : 1.0;
-    player.hp -= dmg * reduction;
+    const fluidMult = (skillActiveMs['fluid']||0) > 0 ? 0.5 : 1.0;
+    // 플레이어 방어율 적용 (playerStats.defense %)
+    const defMult = 1.0 - (playerStats.defense / 100);
+    player.hp -= dmg * fluidMult * defMult;
     spawnHitEffect(srcX ?? player.x, srcY ?? player.y, '#f88');
   }
 
@@ -1509,6 +1606,8 @@ document.addEventListener('DOMContentLoaded', () => {
     lastBossScoreThreshold=0;
     lastHealthThreshold=0;lastMaxHpThreshold=0;deletedHpPacks=0;
     playerFireCooldownMs=0;powerUpMs=0;dashTrailMs=0;isMouseDown=false;
+    playerStats={defense:0,speedBonus:0,fireCdBonus:0,dmgBonus:0,hpBonus:0};
+    statToast=null;
     skillCooldowns={};skillActiveMs={};
     parryWindowMs=0;parryWindowUsed=false;
     isSubmittingScore=false;scoreSubmitted=false;
@@ -1594,7 +1693,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Player movement
     const windDebuff = windSlowActive ? 0.65 : 1.0;
     const speedMult = (powerUpMs > 0 ? POWERUP_SPEED_MULT : 1) * windDebuff;
-    const move = player.speed * speedMult * dt / FRAME_REF;
+    // 이속 보너스: player.speed(기본값) + speedBonus 적용
+    const effectiveSpeed = (PLAYER_BASE_SPEED + playerStats.speedBonus) * speedMult;
+    const move = effectiveSpeed * dt / FRAME_REF;
     if (keys['ArrowLeft'] ||keys['a']) player.x -= move;
     if (keys['ArrowRight']||keys['d']) player.x += move;
     if (keys['ArrowUp']   ||keys['w']) player.y -= move;
@@ -1659,6 +1760,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (recovered > 0) player.hp = Math.min(player.maxHp, player.hp+recovered);
         deletedHpPacks = 0;
         powerUpMs = POWERUP_DURATION;
+        rollStatUpgrade();  // 보스 처치 강화 추첨
         bossActive=false; boss=null; bossCores=[];
         fireZones=[]; earthWalls=null; windTelegraphs=[];
         electricOrbs=[]; electricLinks=[];
@@ -1676,6 +1778,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateWindTelegraphs(dt);
     updateElectricOrbs(dt);
     updateWindMinions(dt);
+
+    updateStatToast(dt);
 
     // Effect lifecycle
     for (const e of effects) {
@@ -1791,6 +1895,7 @@ document.addEventListener('DOMContentLoaded', () => {
     drawWindTelegraphs();
     drawElectricOrbs();
     drawWindMinions();
+    drawStatToast();
     healthPacks.forEach(h=>h.draw());
     bossCores.forEach(c=>c.draw());
     playerBullets.forEach(pb=>pb.draw());
