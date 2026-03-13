@@ -61,15 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   if (hpBarContainer) hpBarContainer.appendChild(hpText);
 
-  // Skill HUD: single slot — shows selected right-click skill + cooldown
+  // Skill HUD: vertical container — one row per skill, current skill highlighted
   const skillHud = document.createElement('div');
   skillHud.id = 'skillHud';
   Object.assign(skillHud.style, {
-    marginTop: '10px', display: 'inline-block',
-    padding: '6px 10px', border: '1.5px solid #7fd3ff',
-    color: '#dff6ff', background: 'rgba(17,17,17,0.9)',
-    font: 'bold 16px sans-serif', lineHeight: '1.2',
-    minWidth: '210px', boxSizing: 'border-box',
+    marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '3px',
   });
   if (ui) ui.appendChild(skillHud);
 
@@ -250,41 +246,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── Skill definitions ───────────────────────────────────────────
   const SKILLS = [
-    {
-      id:       'teleport',
-      name:     '공간도약',
-      desc:     '마우스 방향으로 순간이동',
-      key:      '1',
-      cooldown: 6000,
-    },
-    {
-      id:       'fluid',
-      name:     '유체화',
-      desc:     '3s간 피해 50% 감소',
-      key:      '2',
-      cooldown: 12000,
-    },
-    {
-      id:       'overcharge',
-      name:     '과부하',
-      desc:     '4s간 데미지 2배',
-      key:      '3',
-      cooldown: 14000,
-    },
-    {
-      id:       'parry',
-      name:     '패링',
-      desc:     '시전 0.1s 후 피격 시 쿨타임 70% 감소',
-      key:      '4',
-      cooldown: 8000,
-    },
-    {
-      id:       'barrier',
-      name:     '장벽',
-      desc:     '0.6s 완전 피격 무효화',
-      key:      '5',
-      cooldown: 10000,
-    },
+    { id: 'teleport',  name: '공간도약', desc: '마우스 방향 순간이동',           cooldown: 6000  },
+    { id: 'fluid',     name: '유체화',   desc: '3s 피해 50% 감소',               cooldown: 12000 },
+    { id: 'overcharge',name: '과부하',   desc: '4s 데미지 2배',                  cooldown: 14000 },
+    { id: 'parry',     name: '패링',     desc: '0.1s 후 피격 시 쿨타임 70% 감소', cooldown: 8000  },
+    { id: 'barrier',   name: '장벽',     desc: '0.6s 완전 피격 무효화',           cooldown: 10000 },
   ];
 
   // ─── Skins ───────────────────────────────────────────────────────
@@ -295,9 +261,10 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   // ─── State variables ─────────────────────────────────────────────
-  let bestScore     = parseInt(localStorage.getItem('best') || '0', 10);
-  let selectedSkin  = 0;
-  let selectedSkill = localStorage.getItem('selectedSkill') || 'teleport';
+  let bestScore    = parseInt(localStorage.getItem('best') || '0', 10);
+  let selectedSkin = parseInt(localStorage.getItem('selectedSkin') || '0', 10);
+  // selectedSkill is always derived from skins[selectedSkin].skill — not stored separately
+  function getSelectedSkill() { return skins[selectedSkin].skill; }
 
   // skill cooldown state: map from skill id → remaining ms
   let skillCooldowns = {};
@@ -385,24 +352,51 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ─── Skill UI ─────────────────────────────────────────────────────
-  function getSelectedSkillObj() {
-    return SKILLS.find(s => s.id === selectedSkill) || SKILLS[0];
-  }
-
   function updateSkillHud() {
-    const skill = getSelectedSkillObj();
-    const cd    = skillCooldowns[skill.id] || 0;
-    const ready = cd <= 0;
-    const active = (skillActiveMs[skill.id] || 0) > 0;
-    const label = active
-      ? `우클릭: ${skill.name} ★`
-      : ready
-        ? `우클릭: ${skill.name} (준비)`
-        : `우클릭: ${skill.name} (${(cd/1000).toFixed(1)}s)`;
-    if (skillHud) {
-      skillHud.textContent   = label;
-      skillHud.style.borderColor = active ? '#ffe566' : ready ? '#7fd3ff' : '#ffcf66';
-      skillHud.style.color       = active ? '#ffe566' : ready ? '#dff6ff' : '#ffe8a3';
+    if (!skillHud) return;
+    skillHud.innerHTML = '';
+    const equippedId = getSelectedSkill();
+    for (const skill of SKILLS) {
+      const isEquipped = skill.id === equippedId;
+      const cd    = skillCooldowns[skill.id] || 0;
+      const ready = cd <= 0;
+      const active = (skillActiveMs[skill.id] || 0) > 0;
+
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '3px 7px',
+        background: isEquipped ? 'rgba(127,211,255,0.12)' : 'rgba(17,17,17,0.85)',
+        border: `1px solid ${active ? '#ffe566' : isEquipped ? (ready ? '#7fd3ff' : '#ffcf66') : '#333'}`,
+        color: active ? '#ffe566' : isEquipped ? (ready ? '#dff6ff' : '#ffe8a3') : '#666',
+        font: `${isEquipped ? 'bold' : 'normal'} 13px sans-serif`,
+        minWidth: '200px', boxSizing: 'border-box',
+        opacity: isEquipped ? '1' : '0.5',
+      });
+
+      // Skill name
+      const nameSpan = document.createElement('span');
+      nameSpan.style.flex = '1';
+      nameSpan.textContent = (isEquipped ? '[F/우클릭] ' : '') + skill.name;
+      row.appendChild(nameSpan);
+
+      // Cooldown / status
+      const cdSpan = document.createElement('span');
+      cdSpan.style.fontSize = '11px';
+      cdSpan.style.minWidth = '48px';
+      cdSpan.style.textAlign = 'right';
+      if (!isEquipped) {
+        cdSpan.textContent = '';
+      } else if (active) {
+        cdSpan.textContent = '활성 ★';
+      } else if (ready) {
+        cdSpan.textContent = '준비';
+      } else {
+        cdSpan.textContent = (cd/1000).toFixed(1) + 's';
+      }
+      row.appendChild(cdSpan);
+
+      skillHud.appendChild(row);
     }
   }
 
@@ -410,36 +404,50 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!skinsDiv) return;
     skinsDiv.innerHTML = '';
     skins.forEach((s, i) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;';
+
       const d = document.createElement('div');
       d.className = 'skin';
       d.style.background = s.color;
-      if (bestScore < s.cost) d.classList.add('locked');
-      d.onclick = () => {
-        if (bestScore >= s.cost) {
+      const locked = bestScore < s.cost;
+      if (locked) d.classList.add('locked');
+
+      // Skill badge below skin swatch
+      const badge = document.createElement('div');
+      badge.style.cssText = `font:10px sans-serif;color:${locked?'#555':'#aaa'};text-align:center;`;
+      const skillObj = SKILLS.find(sk => sk.id === s.skill);
+      badge.textContent = skillObj ? skillObj.name : '';
+
+      wrap.onclick = () => {
+        if (!locked) {
           selectedSkin = i;
-          [...skinsDiv.querySelectorAll('.skin')].forEach(x => x.style.borderColor = '#fff');
-          d.style.borderColor = '#f00';
+          localStorage.setItem('selectedSkin', String(i));
+          // skill auto-equips from skin
+          renderSkinButtons();
+          renderSkillButtons();
         }
       };
-      skinsDiv.appendChild(d);
+      wrap.appendChild(d);
+      wrap.appendChild(badge);
+      skinsDiv.appendChild(wrap);
     });
-    const cur = skinsDiv.querySelectorAll('.skin')[selectedSkin];
-    if (cur) cur.style.borderColor = '#f00';
+    // Highlight selected
+    const wraps = skinsDiv.querySelectorAll('.skin');
+    wraps.forEach((el, i) => { el.style.borderColor = i === selectedSkin ? '#f00' : '#fff'; });
   }
 
-  // Menu: clickable skill selection — one is active as right-click skill
+  // Menu: read-only skill display — shows all 5, highlights the skin-locked one
   function renderSkillButtons() {
     if (!skillsDiv) return;
     skillsDiv.innerHTML = '';
+    const equippedId = getSelectedSkill();
     for (const skill of SKILLS) {
       const btn = document.createElement('button');
-      btn.className = 'skillBtn' + (skill.id === selectedSkill ? ' selected' : '');
+      btn.className = 'skillBtn' + (skill.id === equippedId ? ' selected' : '');
+      btn.style.opacity = skill.id === equippedId ? '1' : '0.45';
       btn.innerHTML = `<strong>${skill.name}</strong><small>${skill.desc} | CD: ${skill.cooldown/1000}s</small>`;
-      btn.onclick = () => {
-        selectedSkill = skill.id;
-        localStorage.setItem('selectedSkill', selectedSkill);
-        renderSkillButtons();
-      };
+      btn.disabled = true;
       skillsDiv.appendChild(btn);
     }
   }
@@ -1628,6 +1636,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('keydown', e => {
     keys[e.key] = true;
     if (e.key===' ') e.preventDefault();
+    if (e.key==='f' || e.key==='F') {
+      e.preventDefault();
+      useSkill(getSelectedSkill());
+    }
   });
   window.addEventListener('keyup', e => { keys[e.key]=false; });
 
@@ -1640,7 +1652,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const r=canvas.getBoundingClientRect();
     mouseX=e.clientX-r.left; mouseY=e.clientY-r.top;
     if (e.button===0) firePlayerBullet(mouseX,mouseY);
-    if (e.button===2) useSkill(selectedSkill);
+    if (e.button===2) useSkill(getSelectedSkill());
   });
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); });
 
