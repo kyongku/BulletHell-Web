@@ -932,8 +932,8 @@ document.addEventListener('DOMContentLoaded', () => {
     resolveWaterHealing() {
       const remain = bossCores.filter(c => c.alive).length;
       // 토템 1개 생존당: maxHp +1, hp +10
-      this.maxHp += remain * 1;
-      this.hp = Math.min(this.maxHp, this.hp + remain * 10);
+      this.maxHp += remain * (this.maxHp * 0.10);
+      this.hp = Math.min(this.maxHp, this.hp + remain * (this.maxHp * 0.10));
       this.waterHealActive = false;
       this.invulnMs = 0;
       bossCores = [];
@@ -1018,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this._waterDrainMs = (this._waterDrainMs||0) + dt;
         if (this._waterDrainMs >= 1000) {
           this._waterDrainMs -= 1000;
-          applyPlayerHit(1, this.x, this.y);
+          applyPlayerHit(this.maxHp * 0.001, this.x, this.y);
         }
       }
 
