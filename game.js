@@ -1481,11 +1481,14 @@ document.addEventListener('DOMContentLoaded', () => {
     skillCooldowns[skillId] = skill.cooldown;
 
     if (skillId === 'teleport') {
+      const TELEPORT_RANGE = 220;
       const dx = mouseX - player.x, dy = mouseY - player.y;
-      const len = Math.hypot(dx,dy) || 1;
-      const dist = 200;
-      player.x = clamp(player.x + (dx/len)*dist, player.r, canvas.width  - player.r);
-      player.y = clamp(player.y + (dy/len)*dist, player.r, canvas.height - player.r);
+      const mouseDist = Math.hypot(dx, dy) || 1;
+      // 사거리 내면 마우스 위치로, 밖이면 방향만 따라 최대 사거리까지
+      const actualDist = Math.min(mouseDist, TELEPORT_RANGE);
+      const nx = dx / mouseDist, ny = dy / mouseDist;
+      player.x = clamp(player.x + nx * actualDist, player.r, canvas.width  - player.r);
+      player.y = clamp(player.y + ny * actualDist, player.r, canvas.height - player.r);
       dashTrailMs = 200;
       spawnShockwave(player.x, player.y, 50, '#9ff', 1.5);
       return;
@@ -2037,24 +2040,40 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.beginPath(); ctx.arc(player.x,player.y,player.r*0.45,0,Math.PI*2); ctx.fill();
     ctx.restore();
 
-    // 점멸 미리보기: 우클릭 누르는 동안 도착 위치 표시
+    // 점멸 미리보기: 우클릭 누르는 동안 도착 위치 + 최대 사거리 원 표시
     if (isRightDown && getSelectedSkill() === 'teleport' && (skillCooldowns['teleport']||0) <= 0) {
+      const TELEPORT_RANGE = 220;
       const dx = mouseX - player.x, dy = mouseY - player.y;
-      const len = Math.hypot(dx,dy) || 1;
-      const dist = 200;
-      const px = clamp(player.x + (dx/len)*dist, player.r, canvas.width  - player.r);
-      const py = clamp(player.y + (dy/len)*dist, player.r, canvas.height - player.r);
+      const mouseDist = Math.hypot(dx, dy) || 1;
+      const actualDist = Math.min(mouseDist, TELEPORT_RANGE);
+      const nx = dx / mouseDist, ny = dy / mouseDist;
+      const px = clamp(player.x + nx * actualDist, player.r, canvas.width  - player.r);
+      const py = clamp(player.y + ny * actualDist, player.r, canvas.height - player.r);
+      const inRange = mouseDist <= TELEPORT_RANGE;
+
       ctx.save();
-      ctx.globalAlpha = 0.45;
-      ctx.strokeStyle = '#9ff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+
+      // 최대 사거리 원
+      ctx.globalAlpha = 0.25;
+      ctx.strokeStyle = '#9ff'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.arc(player.x, player.y, TELEPORT_RANGE, 0, Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 플레이어 → 도착지 점선
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = inRange ? '#9ff' : '#f88';  // 사거리 밖이면 빨강
+      ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
       ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(px, py); ctx.stroke();
       ctx.setLineDash([]);
+
+      // 도착 위치 고스트
       ctx.globalAlpha = 0.35;
       ctx.fillStyle = player.color;
       ctx.beginPath(); ctx.arc(px, py, player.r, 0, Math.PI*2); ctx.fill();
       ctx.globalAlpha = 0.7;
       ctx.strokeStyle = '#9ff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(px, py, player.r + 4, 0, Math.PI*2); ctx.stroke();
+
       ctx.restore();
     }
   }
