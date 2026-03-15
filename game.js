@@ -366,7 +366,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let mouseX       = canvas.width  / 2;
   let mouseY       = canvas.height / 2;
   let playerFireCooldownMs = 0;
-  let isMouseDown = false;  // 좌클릭 꾹 누르기 지속 발사용
+  let isMouseDown   = false;  // 좌클릭 꾹 누르기 지속 발사용
+  let isRightDown   = false;  // 우클릭 누르는 중 (점멸 미리보기용)
 
   // ─── 플레이어 누적 강화 스탯 ────────────────────────────────────
   // 보스 처치 시 누적, 게임 재시작 시 초기화
@@ -671,7 +672,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     draw() {
       ctx.save();
-      ctx.fillStyle = this.color;
+      // 라이트 모드에서 밝은 탄(흰/노랑 계열)은 어두운 색으로 반전
+      ctx.fillStyle = isLight() ? darkenForLight(this.color) : this.color;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
       ctx.fill();
@@ -1618,7 +1620,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pendingBossData=null;pendingBossLabel='';
     lastBossScoreThreshold=0;
     lastHealthThreshold=0;lastMaxHpThreshold=0;deletedHpPacks=0;
-    playerFireCooldownMs=0;powerUpMs=0;dashTrailMs=0;isMouseDown=false;
+    playerFireCooldownMs=0;powerUpMs=0;dashTrailMs=0;isMouseDown=false;isRightDown=false;
     playerStats={defense:0,speedBonus:0,fireCdBonus:0,dmgBonus:0,hpBonus:0};
     statToast=null;
     skillCooldowns={};skillActiveMs={};
@@ -1883,10 +1885,51 @@ document.addEventListener('DOMContentLoaded', () => {
   // 반투명 오버레이용
   function getThemeFgA(a)   { return isLight() ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a})`; }
 
+  // 라이트 모드에서 밝은 색(R+G+B > 480) → 어두운 보색으로 치환
+  function darkenForLight(hex) {
+    if (!isLight()) return hex;
+    if (!hex || hex[0] !== '#' || hex.length < 7) return hex;
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    // 밝기 합산 — 밝은 색이면 반전
+    if (r + g + b > 480) {
+      // 보색 계열로 어둡게
+      const nr = Math.max(0, 255-r) >> 1;
+      const ng = Math.max(0, 255-g) >> 1;
+      const nb = Math.max(0, 255-b) >> 1;
+      return `#${nr.toString(16).padStart(2,'0')}${ng.toString(16).padStart(2,'0')}${nb.toString(16).padStart(2,'0')}`;
+    }
+    return hex;
+  }
+
+  // 라이트 모드에서 보스 bg/border를 밝은 배경에 맞게 혼합
+  function adaptBossColor(hex, isBg) {
+    if (!isLight() || !hex || hex[0] !== '#') return hex;
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    if (isBg) {
+      // bg: 흰색(232,232,232)과 60:40 혼합 → 밝은 버전
+      const nr = ((r + 232*2) / 3) | 0;
+      const ng = ((g + 232*2) / 3) | 0;
+      const nb = ((b + 232*2) / 3) | 0;
+      return `#${nr.toString(16).padStart(2,'0')}${ng.toString(16).padStart(2,'0')}${nb.toString(16).padStart(2,'0')}`;
+    } else {
+      // border: 원래 색 그대로 (속성 색은 유지)
+      return hex;
+    }
+  }
+
   function drawBackground() {
     let bg = getThemeBg(), border = getThemeBorder();
-    if (bossActive && boss)                      { bg = boss.data.bg; border = boss.data.border; }
-    else if (warningActive && pendingBossData)    { bg = pendingBossData.bg; border = pendingBossData.border; }
+    if (bossActive && boss) {
+      bg     = adaptBossColor(boss.data.bg,     true);
+      border = adaptBossColor(boss.data.border, false);
+    } else if (warningActive && pendingBossData) {
+      bg     = adaptBossColor(pendingBossData.bg,     true);
+      border = adaptBossColor(pendingBossData.border, false);
+    }
     ctx.fillStyle = bg;
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.strokeStyle = border; ctx.lineWidth=5;
@@ -1985,9 +2028,35 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.save();
     ctx.fillStyle = player.color;
     ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.fill();
+    // 라이트 모드: 외곽선 검정
+    if (isLight()) {
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.stroke();
+    }
     ctx.fillStyle = getThemeBg();
     ctx.beginPath(); ctx.arc(player.x,player.y,player.r*0.45,0,Math.PI*2); ctx.fill();
     ctx.restore();
+
+    // 점멸 미리보기: 우클릭 누르는 동안 도착 위치 표시
+    if (isRightDown && getSelectedSkill() === 'teleport' && (skillCooldowns['teleport']||0) <= 0) {
+      const dx = mouseX - player.x, dy = mouseY - player.y;
+      const len = Math.hypot(dx,dy) || 1;
+      const dist = 200;
+      const px = clamp(player.x + (dx/len)*dist, player.r, canvas.width  - player.r);
+      const py = clamp(player.y + (dy/len)*dist, player.r, canvas.height - player.r);
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = '#9ff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+      ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(px, py); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = player.color;
+      ctx.beginPath(); ctx.arc(px, py, player.r, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = '#9ff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, player.r + 4, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // ─── Game loop ────────────────────────────────────────────────────
@@ -2048,10 +2117,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const m = getCanvasMouse(e);
     mouseX = m.x; mouseY = m.y;
     if (e.button===0) { isMouseDown=true; firePlayerBullet(mouseX,mouseY); }
-    if (e.button===2) useSkill(getSelectedSkill());
+    if (e.button===2) {
+      // 점멸 스킬이면 누르는 동안 미리보기만, 아니면 즉시 발동
+      if (getSelectedSkill() === 'teleport') {
+        isRightDown = true;
+      } else {
+        useSkill(getSelectedSkill());
+      }
+    }
   });
   window.addEventListener('mouseup', e => {
     if (e.button===0) isMouseDown=false;
+    if (e.button===2) {
+      if (isRightDown && getSelectedSkill() === 'teleport' && !gameOver && !isPaused) {
+        useSkill('teleport');
+      }
+      isRightDown = false;
+    }
   });
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); });
 
