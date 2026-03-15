@@ -553,51 +553,53 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ─── Skill UI ─────────────────────────────────────────────────────
-  function updateSkillHud() {
+  // DOM은 한 번만 생성, 이후 텍스트/스타일만 업데이트 (매 프레임 innerHTML 재생성 방지)
+  let _skillHudRows = null;
+
+  function buildSkillHudRows() {
     if (!skillHud) return;
     skillHud.innerHTML = '';
-    const equippedId = getSelectedSkill();
+    _skillHudRows = [];
     for (const skill of SKILLS) {
-      const isEquipped = skill.id === equippedId;
-      const cd    = skillCooldowns[skill.id] || 0;
-      const ready = cd <= 0;
-      const active = (skillActiveMs[skill.id] || 0) > 0;
-
       const row = document.createElement('div');
       Object.assign(row.style, {
         display: 'flex', alignItems: 'center', gap: '6px',
         padding: '3px 7px',
-        background: isEquipped ? 'rgba(127,211,255,0.12)' : 'rgba(17,17,17,0.85)',
-        border: `1px solid ${active ? '#ffe566' : isEquipped ? (ready ? '#7fd3ff' : '#ffcf66') : '#333'}`,
-        color: active ? '#ffe566' : isEquipped ? (ready ? '#dff6ff' : '#ffe8a3') : '#666',
-        font: `${isEquipped ? 'bold' : 'normal'} 13px sans-serif`,
+        background: 'rgba(17,17,17,0.85)',
+        border: '1px solid #333',
+        color: '#666',
+        font: '13px sans-serif',
         minWidth: '200px', boxSizing: 'border-box',
-        opacity: isEquipped ? '1' : '0.5',
+        opacity: '0.5',
       });
-
-      // Skill name
       const nameSpan = document.createElement('span');
       nameSpan.style.flex = '1';
-      nameSpan.textContent = (isEquipped ? '[F/우클릭] ' : '') + skill.name;
       row.appendChild(nameSpan);
-
-      // Cooldown / status
       const cdSpan = document.createElement('span');
-      cdSpan.style.fontSize = '11px';
-      cdSpan.style.minWidth = '48px';
-      cdSpan.style.textAlign = 'right';
-      if (!isEquipped) {
-        cdSpan.textContent = '';
-      } else if (active) {
-        cdSpan.textContent = '활성 ★';
-      } else if (ready) {
-        cdSpan.textContent = '준비';
-      } else {
-        cdSpan.textContent = (cd/1000).toFixed(1) + 's';
-      }
+      cdSpan.style.cssText = 'font-size:11px;min-width:48px;text-align:right;';
       row.appendChild(cdSpan);
-
       skillHud.appendChild(row);
+      _skillHudRows.push({ row, nameSpan, cdSpan, skillId: skill.id, skillName: skill.name });
+    }
+  }
+
+  function updateSkillHud() {
+    if (!skillHud) return;
+    if (!_skillHudRows) buildSkillHudRows();
+    const equippedId = getSelectedSkill();
+    for (const entry of _skillHudRows) {
+      const { row, nameSpan, cdSpan, skillId, skillName } = entry;
+      const isEquipped = skillId === equippedId;
+      const cd    = skillCooldowns[skillId] || 0;
+      const ready = cd <= 0;
+      const active = (skillActiveMs[skillId] || 0) > 0;
+      row.style.background = isEquipped ? 'rgba(127,211,255,0.12)' : 'rgba(17,17,17,0.85)';
+      row.style.border     = '1px solid ' + (active ? '#ffe566' : isEquipped ? (ready ? '#7fd3ff' : '#ffcf66') : '#333');
+      row.style.color      = active ? '#ffe566' : isEquipped ? (ready ? '#dff6ff' : '#ffe8a3') : '#666';
+      row.style.fontWeight = isEquipped ? 'bold' : 'normal';
+      row.style.opacity    = isEquipped ? '1' : '0.5';
+      nameSpan.textContent = (isEquipped ? '[F/우클릭] ' : '') + skillName;
+      cdSpan.textContent   = !isEquipped ? '' : active ? '활성 ★' : ready ? '준비' : (cd/1000).toFixed(1) + 's';
     }
   }
 
@@ -1399,17 +1401,18 @@ document.addEventListener('DOMContentLoaded', () => {
   let lightningStrikes = [];  // { x, telegraphMs, fired, life }
 
   function scheduleLightningStrike(bossRef) {
-    const dmg = (player.maxHp / 15) * (1.0 + score / 8000);
+    const dmg = (player.maxHp / 12) * (1.0 + score / 8000);
     for (let i = 0; i < 4; i++) {
-      const offsetX = (Math.random()-0.5)*80;
-      const tx = clamp(player.x + offsetX, 30, canvas.width-30);
+      const offsetX = (Math.random()-0.5)*90;
+      const tx = clamp(player.x + offsetX, 40, canvas.width-40);
+      // i*150ms 간격으로 각자 독립 타이머
       lightningStrikes.push({
         x: tx,
-        seed: (Math.random()*1000)|0,  // 지그재그 seed
-        telegraphMs: 300,
-        fireDelay: i*100,
+        seed: (Math.random()*9999)|0,
+        telegraphMs: 800 + i*150,  // 점선 예고 시간
+        flashMs: -1,               // -1=미발동, >0=플래시 중
+        maxFlash: 220,
         fired: false,
-        life: 500,
         dmg,
       });
     }
@@ -1418,29 +1421,34 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateLightningStrikes(dt) {
     if (!bossActive || !boss || !boss.data.isElectric) { lightningStrikes=[]; return; }
     for (const s of lightningStrikes) {
-      s.telegraphMs -= dt;
-      s.fireDelay   -= dt;
-      if (!s.fired && s.fireDelay <= 0) {
-        s.fired = true;
-        // 위에서 아래로 탄 (vx=0, vy=큰값, lifeMs로 거리 조절)
-        bullets.push(new Bullet(s.x, -10,
-          0, 18,
-          7, '#ffe566', s.dmg, false, { lifeMs: 800 }));
-        spawnShockwave(s.x, 10, 20, '#ffe566', 1.5);
+      if (s.flashMs > 0) {
+        // 플래시 진행 중
+        s.flashMs -= dt;
+      } else if (!s.fired) {
+        s.telegraphMs -= dt;
+        if (s.telegraphMs <= 0) {
+          // 예고 끝 → 번개 발동
+          s.fired  = true;
+          s.flashMs = s.maxFlash;
+          // 플레이어 X 범위 판정 (번개 X ±30px 내)
+          if (Math.abs(player.x - s.x) < 30) {
+            applyPlayerHit(s.dmg, s.x, player.y);
+          }
+          spawnShockwave(s.x, canvas.height * 0.5, 35, '#ffe566', 2);
+        }
       }
-      s.life -= dt;
     }
-    lightningStrikes = lightningStrikes.filter(s => s.life > 0);
+    // 플래시 끝난 것 제거
+    lightningStrikes = lightningStrikes.filter(s => !s.fired || s.flashMs > 0);
   }
 
-  // 지그재그 번개 모양 경로 생성 (seed 기반으로 매 프레임 일관성 유지)
+  // seed 기반 번개 지그재그 경로
   function buildZigzagPath(x, seed) {
-    const pts = [{ x, y: 0 }];
-    const segments = 14;
-    for (let i = 1; i <= segments; i++) {
-      const y = (canvas.height / segments) * i;
-      // seed + i 기반 pseudo-random offset
-      const offset = ((seed * 7 + i * 13) % 40) - 20;
+    const pts = [];
+    const segs = 16;
+    for (let i = 0; i <= segs; i++) {
+      const y = (canvas.height / segs) * i;
+      const offset = i === 0 || i === segs ? 0 : ((seed * 7 + i * 17) % 52) - 26;
       pts.push({ x: x + offset, y });
     }
     return pts;
@@ -1448,28 +1456,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function drawLightningStrikes() {
     for (const s of lightningStrikes) {
-      if (s.fired) continue;
-      const progress = 1 - s.telegraphMs / 300;  // 0→1
-      const alpha = 0.15 + progress * 0.75;
-      const pts = buildZigzagPath(s.x, s.seed||0);
       ctx.save();
-      ctx.globalAlpha = alpha;
-      // 외곽 글로우
-      ctx.strokeStyle = 'rgba(255,230,100,0.3)';
-      ctx.lineWidth = 6;
-      ctx.shadowBlur = 12; ctx.shadowColor = '#ffe566';
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (const p of pts) ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      // 중심선
-      ctx.strokeStyle = '#fff8c0';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (const p of pts) ctx.lineTo(p.x, p.y);
-      ctx.stroke();
+      if (!s.fired) {
+        // 예고: 점선 수직선 (위→아래 전체)
+        const elapsed = 800 - s.telegraphMs;  // 경과 시간
+        const alpha = 0.2 + (elapsed / 800) * 0.5;
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = '#ffe566';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        ctx.moveTo(s.x, 0);
+        ctx.lineTo(s.x, canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // 경고 삼각형 (위쪽)
+        ctx.globalAlpha = alpha * 0.9;
+        ctx.fillStyle = '#ffe566';
+        ctx.beginPath();
+        ctx.moveTo(s.x, 8);
+        ctx.lineTo(s.x-8, 24);
+        ctx.lineTo(s.x+8, 24);
+        ctx.closePath();
+        ctx.fill();
+      } else if (s.flashMs > 0) {
+        // 발동: 번개 지그재그 플래시
+        const ratio = s.flashMs / s.maxFlash;
+        const pts = buildZigzagPath(s.x, s.seed||0);
+        // 외곽 글로우
+        ctx.globalAlpha = ratio * 0.6;
+        ctx.strokeStyle = 'rgba(255,255,200,0.5)';
+        ctx.lineWidth = 14;
+        ctx.shadowBlur = 20; ctx.shadowColor = '#ffe566';
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (const p of pts) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        // 중간 선
+        ctx.globalAlpha = ratio * 0.9;
+        ctx.strokeStyle = '#ffe566';
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (const p of pts) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        // 중심 흰선
+        ctx.globalAlpha = ratio;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.shadowBlur = 0;
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (const p of pts) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }
@@ -1544,10 +1582,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (orb.x + orb.r >= canvas.width)         { orb.vx = -Math.abs(orb.vx); spawnHitEffect(orb.x, orb.y, '#ffe566'); }
       if (orb.y - orb.r <= 0)                    { orb.vy =  Math.abs(orb.vy); spawnHitEffect(orb.x, orb.y, '#ffe566'); }
       if (orb.y + orb.r >= canvas.height)        { orb.vy = -Math.abs(orb.vy); spawnHitEffect(orb.x, orb.y, '#ffe566'); }
-      // Player contact
+      // Player contact — hitCooldown으로 매 프레임 호출 방지
       if (Math.hypot(orb.x - player.x, orb.y - player.y) < orb.r + player.r) {
-        applyPlayerHit(bossDmg, orb.x, orb.y);
-        spawnShockwave(orb.x, orb.y, 30, '#ffe566', 1.5);
+        orb.hitCooldown = (orb.hitCooldown||0) - dt;
+        if (orb.hitCooldown <= 0) {
+          orb.hitCooldown = 400;
+          applyPlayerHit(bossDmg, orb.x, orb.y);
+          spawnHitEffect(orb.x, orb.y, '#ffe566');
+        }
+      } else {
+        orb.hitCooldown = 0;
       }
     }
     // Player bullets can destroy orbs
