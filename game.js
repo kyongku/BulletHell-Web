@@ -995,7 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (this.windAuraActive) {
         const auraDist = this.size * 2;
         if (Math.hypot(player.x - this.x, player.y - this.y) < auraDist + player.r) {
-          applyPlayerHit(bossDmg * 0.06 * dt / FRAME_REF, this.x, this.y);
+          applyPlayerHit(bossDmg * 0.06 * dt / FRAME_REF, this.x, this.y, true);
         }
       }
 
@@ -1004,7 +1004,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this._waterDrainMs = (this._waterDrainMs||0) + dt;
         if (this._waterDrainMs >= 1000) {
           this._waterDrainMs -= 1000;
-          applyPlayerHit(1, this.x, this.y);
+          applyPlayerHit(1, this.x, this.y, true);
         }
       }
 
@@ -1188,11 +1188,11 @@ document.addEventListener('DOMContentLoaded', () => {
     earthWalls.right = Math.min(maxW, earthWalls.right + spd*dt/1000);
     if (player.x - player.r < earthWalls.left) {
       player.x = earthWalls.left + player.r;
-      applyPlayerHit(Math.max(1.8, player.maxHp/28)*dt/220, player.x, player.y);
+      applyPlayerHit(Math.max(1.8, player.maxHp/28)*dt/220, player.x, player.y, true);
     }
     if (player.x + player.r > canvas.width - earthWalls.right) {
       player.x = canvas.width - earthWalls.right - player.r;
-      applyPlayerHit(Math.max(1.8, player.maxHp/28)*dt/220, player.x, player.y);
+      applyPlayerHit(Math.max(1.8, player.maxHp/28)*dt/220, player.x, player.y, true);
     }
   }
 
@@ -1307,7 +1307,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // 플레이어 접촉 데미지
       if (Math.hypot(m.x - player.x, m.y - player.y) < m.r + player.r) {
-        applyPlayerHit(m.atk * 0.08 * dt / FRAME_REF, m.x, m.y);
+        applyPlayerHit(m.atk * 0.08 * dt / FRAME_REF, m.x, m.y, true);
       }
     }
 
@@ -1797,7 +1797,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── Centralised player hit handler ──────────────────────────────
   // Checks all active damage mitigations before applying HP loss
-  function applyPlayerHit(dmg, srcX, srcY) {
+  function applyPlayerHit(dmg, srcX, srcY, noEffect=false) {
     // Barrier: full block
     if ((skillActiveMs['barrier']||0) > 0) {
       skillActiveMs['barrier'] = 0; // consumed
@@ -1834,7 +1834,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 플레이어 방어율 적용 (playerStats.defense %)
     const defMult = 1.0 - (playerStats.defense / 100);
     player.hp -= dmg * fluidMult * defMult;
-    spawnHitEffect(srcX ?? player.x, srcY ?? player.y, '#f88');
+    if (!noEffect) spawnHitEffect(srcX ?? player.x, srcY ?? player.y, '#f88');
   }
 
   // ─── Effect helpers ───────────────────────────────────────────────
@@ -2046,7 +2046,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Boss body contact
       if (Math.abs(player.x-boss.x) <= boss.size/2+player.r &&
           Math.abs(player.y-boss.y) <= boss.size/2+player.r) {
-        applyPlayerHit((player.maxHp/15)*0.15*dt/FRAME_REF, boss.x, boss.y);
+        applyPlayerHit((player.maxHp/15)*0.15*dt/FRAME_REF, boss.x, boss.y, true);
       }
       if (boss.hp <= 0) {
         score += BOSS_KILL_BONUS;
@@ -2092,6 +2092,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     effects = effects.filter(e => e.life > 0);
+    if (effects.length > 200) effects.splice(0, effects.length - 200);
 
     // Player bullet vs boss / core collisions
     if (bossActive && boss) {
