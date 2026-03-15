@@ -36,6 +36,10 @@
             <button id="btnLight" class="themeBtn">라이트</button>
           </div>
         </div>
+        <div class="settingRow">
+          <span>닉네임: <span id="currentNickname">미설정</span></span>
+          <button id="btnChangeNick" class="themeBtn">변경</button>
+        </div>
       </div>
     </div>
   </div>
@@ -83,7 +87,24 @@
       window.location.href = './ranking/';
     });
 
-    // 테마 초기화
+    // 닉네임 표시 및 변경
+    function refreshNickDisplay() {
+      const nick = localStorage.getItem('nickname');
+      document.getElementById('currentNickname').textContent = nick || '미설정';
+    }
+    refreshNickDisplay();
+
+    document.getElementById('btnChangeNick').addEventListener('click', () => {
+      const newName = prompt('새 닉네임 입력 (한글 1~4자)');
+      if (!newName) return;
+      const trimmed = newName.trim();
+      if (!/^[가-힣]{1,4}$/.test(trimmed)) {
+        alert('이름은 한글 1~4자만 가능합니다.');
+        return;
+      }
+      localStorage.setItem('nickname', trimmed);
+      refreshNickDisplay();
+    });
     const savedTheme = localStorage.getItem('theme') || 'dark';
     if (savedTheme === 'light') document.body.classList.add('light');
     document.getElementById('btnDark').classList.toggle('active', savedTheme === 'dark');
