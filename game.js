@@ -169,8 +169,8 @@ document.addEventListener('DOMContentLoaded', () => {
       bg: '#0d0d1f', border: '#4a4aaa',
       burst: '#ffe566', spiral: '#ffc533', aimed: '#ffec99',
       size: 74, maxHp: 720,
-      // 전기: 일반탄 없음 — burstInterval 엄청 크게 설정해서 사실상 비활성
-      thresholds: { burst: 0.0, spiral: 0.0 },
+      // 전기: 일반탄 없음 — phase 변경 없이 burst 고정 (ratio는 0~1이므로 1.1 초과 불가)
+      thresholds: { burst: 1.1, spiral: 1.1 },
       burstInterval: 999999, burstSpeed: 0, burstCount: 0, burstDestructRatio: 0,
       spiralInterval: 999999, spiralSpeed: 0,
       aimedInterval: 999999, aimedShots: 0, aimedDelay: 0, aimedSpeed: 0,
@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
       isElectric: true,
       // 낙뢰: 2초마다, 꺽이는 탄: 5초마다
       lightningInterval: 2000,
-      boltInterval: 5000,
+      wallBarrageInterval: 5000,
     },
   };
 
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fireMultiplier:         hasFire ? best('fireMultiplier') : 1.0,
       laserInterval:          hasWind ? min('laserInterval') : null,
       lightningInterval:      hasElec ? min('lightningInterval') : null,
-      boltInterval:           hasElec ? min('boltInterval') : null,
+      wallBarrageInterval:    hasElec ? min('wallBarrageInterval') : null,
       isElectric: hasElec,
       isEarth:    hasEarth,
       isWind:     hasWind,
@@ -683,22 +683,6 @@ document.addEventListener('DOMContentLoaded', () => {
         this.vx += ((dx/len)*spd - this.vx) * this.homing;
         this.vy += ((dy/len)*spd - this.vy) * this.homing;
       }
-      // 꺽이는 전기탄 처리
-      if (this.bendBolt && this.bendsLeft > 0) {
-        const spd = Math.hypot(this.vx, this.vy);
-        this.distTraveled += spd * dt / FRAME_REF;
-        if (this.distTraveled >= this.bendEvery) {
-          this.distTraveled = 0;
-          this.bendsLeft--;
-          // 4방향 중 랜덤
-          const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-          const [nx,ny] = dirs[(Math.random()*4)|0];
-          this.vx = nx * spd;
-          this.vy = ny * spd;
-          this.lifeMs = 400; // 꺽일 때마다 수명 갱신
-          spawnHitEffect(this.x, this.y, '#ffe566');
-        }
-      }
       this.x += this.vx * dt / FRAME_REF;
       this.y += this.vy * dt / FRAME_REF;
       this.lifeMs -= dt;
@@ -841,7 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Electric trait timers
       this.lightningTickMs   = 0;
-      this.boltTickMs        = 0;
+      this.wallBarrageTickMs = 0;
 
       // Wind aura (반피 이후 근접 지속피해)
       this.windAuraActive    = false;
@@ -932,8 +916,8 @@ document.addEventListener('DOMContentLoaded', () => {
     resolveWaterHealing() {
       const remain = bossCores.filter(c => c.alive).length;
       // 토템 1개 생존당: maxHp +1, hp +10
-      this.maxHp += remain * (this.maxHp * 0.10);
-      this.hp = Math.min(this.maxHp, this.hp + remain * (this.maxHp * 0.10));
+      this.maxHp += remain * 1;
+      this.hp = Math.min(this.maxHp, this.hp + remain * 10);
       this.waterHealActive = false;
       this.invulnMs = 0;
       bossCores = [];
@@ -981,10 +965,10 @@ document.addEventListener('DOMContentLoaded', () => {
           scheduleLightningStrike(this);
         }
         // 꺽이는 전기탄 타이머
-        this.boltTickMs = (this.boltTickMs||0) + dt;
-        if (this.boltTickMs >= (this.data.boltInterval||5000)) {
-          this.boltTickMs = 0;
-          spawnBendingBolts(this, bossDmg);
+        this.wallBarrageTickMs = (this.wallBarrageTickMs||0) + dt;
+        if (this.wallBarrageTickMs >= (this.data.wallBarrageInterval||5000)) {
+          this.wallBarrageTickMs = 0;
+          spawnWallBarrage(bossDmg);
         }
       }
 
@@ -1018,15 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this._waterDrainMs = (this._waterDrainMs||0) + dt;
         if (this._waterDrainMs >= 1000) {
           this._waterDrainMs -= 1000;
-          applyPlayerHit(this.maxHp * 0.001, this.x, this.y);
-        }
-      }
-            // 물보스 초당 maxHp 0.1% 자가회복
-      if (this.data.waterHealOnThreshold && bossActive && !this.waterHealActive) {
-        this._waterRegenMs = (this._waterRegenMs||0) + dt;
-        if (this._waterRegenMs >= 1000) {
-          this._waterRegenMs -= 1000;
-          this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.001);
+          applyPlayerHit(1, this.x, this.y);
         }
       }
 
@@ -1423,17 +1399,17 @@ document.addEventListener('DOMContentLoaded', () => {
   let lightningStrikes = [];  // { x, telegraphMs, fired, life }
 
   function scheduleLightningStrike(bossRef) {
-    // 플레이어 위치 + 약간 랜덤 편차로 낙뢰 4발 (0.1초 간격)
     const dmg = (player.maxHp / 15) * (1.0 + score / 8000);
     for (let i = 0; i < 4; i++) {
       const offsetX = (Math.random()-0.5)*80;
       const tx = clamp(player.x + offsetX, 30, canvas.width-30);
       lightningStrikes.push({
         x: tx,
-        telegraphMs: 300,   // 예고 시간
-        fireDelay: i*100,   // 0, 100, 200, 300ms 간격
+        seed: (Math.random()*1000)|0,  // 지그재그 seed
+        telegraphMs: 300,
+        fireDelay: i*100,
         fired: false,
-        life: 400,
+        life: 500,
         dmg,
       });
     }
@@ -1448,47 +1424,95 @@ document.addEventListener('DOMContentLoaded', () => {
         s.fired = true;
         // 위에서 아래로 탄 (vx=0, vy=큰값, lifeMs로 거리 조절)
         bullets.push(new Bullet(s.x, -10,
-          0, 9.5,
-          7, '#ffe566', s.dmg, false, { lifeMs: 900 }));
-        spawnShockwave(s.x, canvas.height*0.1, 20, '#ffe566', 1.5);
+          0, 18,
+          7, '#ffe566', s.dmg, false, { lifeMs: 800 }));
+        spawnShockwave(s.x, 10, 20, '#ffe566', 1.5);
       }
       s.life -= dt;
     }
     lightningStrikes = lightningStrikes.filter(s => s.life > 0);
   }
 
+  // 지그재그 번개 모양 경로 생성 (seed 기반으로 매 프레임 일관성 유지)
+  function buildZigzagPath(x, seed) {
+    const pts = [{ x, y: 0 }];
+    const segments = 14;
+    for (let i = 1; i <= segments; i++) {
+      const y = (canvas.height / segments) * i;
+      // seed + i 기반 pseudo-random offset
+      const offset = ((seed * 7 + i * 13) % 40) - 20;
+      pts.push({ x: x + offset, y });
+    }
+    return pts;
+  }
+
   function drawLightningStrikes() {
     for (const s of lightningStrikes) {
       if (s.fired) continue;
-      const alpha = Math.max(0, 0.7 * (1 - s.telegraphMs/300) + 0.15);
+      const progress = 1 - s.telegraphMs / 300;  // 0→1
+      const alpha = 0.15 + progress * 0.75;
+      const pts = buildZigzagPath(s.x, s.seed||0);
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.strokeStyle = '#ffe566';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 6]);
+      // 외곽 글로우
+      ctx.strokeStyle = 'rgba(255,230,100,0.3)';
+      ctx.lineWidth = 6;
+      ctx.shadowBlur = 12; ctx.shadowColor = '#ffe566';
       ctx.beginPath();
-      ctx.moveTo(s.x, 0);
-      ctx.lineTo(s.x, canvas.height);
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (const p of pts) ctx.lineTo(p.x, p.y);
       ctx.stroke();
-      ctx.setLineDash([]);
+      // 중심선
+      ctx.strokeStyle = '#fff8c0';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (const p of pts) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
       ctx.restore();
     }
   }
 
-  // ─── Electric 꺽이는 전기탄 ──────────────────────────────────────
-  // BendingBolt: 일정 거리 후 무작위 방향으로 꺽임, 8회 반복
-  function spawnBendingBolts(bossRef, dmg) {
-    const dirs = [
-      {vx:0,vy:-1},{vx:1,vy:0},{vx:0,vy:1},{vx:-1,vy:0}
-    ];
-    for (const d of dirs) {
-      const spd = 5.5;
-      bullets.push(new Bullet(
-        bossRef.x, bossRef.y,
-        d.vx*spd, d.vy*spd,
-        6, '#ffe566', dmg, false,
-        { lifeMs: 400, bendBolt: true, bendsLeft: 8, distTraveled: 0, bendEvery: 90 }
-      ));
+  // ─── Electric 벽 탄막 기믹 ──────────────────────────────────────
+  // 수평 또는 수직으로 탄 줄 발사. 한 줄에 구멍(4개 destructible 묶음) 1개.
+  function spawnWallBarrage(dmg) {
+    const isHoriz = Math.random() < 0.5;  // true: 위/아래에서 수직, false: 좌/우에서 수평
+    const spd = 5.0;
+    const r = 8;
+    const gap = r * 2 + 4;  // 탄 간격
+
+    if (isHoriz) {
+      // 위 또는 아래에서 수직으로 날아옴
+      const fromTop = Math.random() < 0.5;
+      const vy = fromTop ? spd : -spd;
+      const startY = fromTop ? -r : canvas.height + r;
+      const count = Math.floor(canvas.width / (gap)) + 1;
+      // 구멍 위치: 4개짜리 destructible 묶음 시작 인덱스
+      const holeStart = 2 + ((Math.random() * (count - 6)) | 0);
+      for (let i = 0; i < count; i++) {
+        const x = i * gap + r;
+        const inHole = i >= holeStart && i < holeStart + 4;
+        bullets.push(new Bullet(
+          x, startY, 0, vy, r,
+          '#ffe566', dmg, inHole  // destructible=true가 구멍
+        ));
+      }
+    } else {
+      // 좌 또는 우에서 수평으로 날아옴
+      const fromLeft = Math.random() < 0.5;
+      const vx = fromLeft ? spd : -spd;
+      const startX = fromLeft ? -r : canvas.width + r;
+      const count = Math.floor(canvas.height / (gap)) + 1;
+      const holeStart = 2 + ((Math.random() * (count - 6)) | 0);
+      for (let i = 0; i < count; i++) {
+        const y = i * gap + r;
+        const inHole = i >= holeStart && i < holeStart + 4;
+        bullets.push(new Bullet(
+          startX, y, vx, 0, r,
+          '#ffe566', dmg, inHole
+        ));
+      }
     }
   }
 
