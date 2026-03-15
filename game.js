@@ -1021,6 +1021,14 @@ document.addEventListener('DOMContentLoaded', () => {
           applyPlayerHit(this.maxHp * 0.001, this.x, this.y);
         }
       }
+            // 물보스 초당 maxHp 0.1% 자가회복
+      if (this.data.waterHealOnThreshold && bossActive && !this.waterHealActive) {
+        this._waterRegenMs = (this._waterRegenMs||0) + dt;
+        if (this._waterRegenMs >= 1000) {
+          this._waterRegenMs -= 1000;
+          this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.001);
+        }
+      }
 
       // 보스별 기본 데미지 (시간 경과 배율 포함)
       const timeDmgScale = 1.0 + score / 8000;  // 스코어 8000마다 +100%
