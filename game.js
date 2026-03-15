@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const hpText = document.createElement('div');
   hpText.id = 'hpText';
   Object.assign(hpText.style, {
-    position: 'absolute', width: '200px', textAlign: 'center',
+    position: 'absolute', width: '200px', textAlign: 'center', color: 'inherit',
     fontSize: '12px', color: '#fff', pointerEvents: 'none',
   });
   if (hpBarContainer) hpBarContainer.appendChild(hpText);
@@ -466,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // 텍스트 그림자
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = isLight() ? '#fff' : '#000';
     ctx.fillText(statToast.text, canvas.width/2 + 1, canvas.height/2 - 59);
     ctx.fillStyle = '#ffe566';
     ctx.fillText(statToast.text, canvas.width/2, canvas.height/2 - 60);
@@ -676,10 +676,10 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
       ctx.fill();
       if (this.destructible) {
-        ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = getThemeFg(); ctx.stroke();
       }
       if (this.heavy) {
-        ctx.globalAlpha = 0.35; ctx.lineWidth = 2; ctx.strokeStyle = '#fff3';
+        ctx.globalAlpha = 0.35; ctx.lineWidth = 2; ctx.strokeStyle = getThemeFgA(0.2);
         ctx.beginPath(); ctx.arc(this.x, this.y, this.r+2, 0, Math.PI*2); ctx.stroke();
       }
       ctx.restore();
@@ -749,14 +749,14 @@ document.addEventListener('DOMContentLoaded', () => {
     draw() {
       const ratio = Math.max(0, this.hp/this.maxHp);
       ctx.save(); ctx.translate(this.x, this.y);
-      ctx.fillStyle = this.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.fillStyle = this.color; ctx.strokeStyle = getThemeFg(); ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(0,-this.size); ctx.lineTo(this.size*0.8,0);
       ctx.lineTo(0,this.size); ctx.lineTo(-this.size*0.8,0); ctx.closePath();
       ctx.fill(); ctx.stroke();
       ctx.fillStyle = `rgba(0,0,0,${0.2+(1-ratio)*0.5})`;
       ctx.beginPath(); ctx.arc(0,0,this.size*0.32,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='#fff'; ctx.font='11px sans-serif'; ctx.textAlign='center';
+      ctx.fillStyle=getThemeFg(); ctx.font='11px sans-serif'; ctx.textAlign='center';
       ctx.fillText(String(this.hits), 0, 4);
       ctx.restore();
     }
@@ -995,7 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     draw() {
       ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.moveAngle);
-      ctx.fillStyle   = this.hitFlashMs > 0 ? '#fff' : this.getPhaseColor();
+      ctx.fillStyle   = this.hitFlashMs > 0 ? getThemeFg() : this.getPhaseColor();
       ctx.strokeStyle = this.data.border;
       ctx.lineWidth   = 3;
       const s = this.size;
@@ -1004,7 +1004,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Earth: subtle armor pattern
       if (this.data.isEarth) {
         ctx.globalAlpha = 0.35;
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = getThemeFg();
         ctx.lineWidth = 1;
         ctx.strokeRect(-s/2+4, -s/2+4, s-8, s-8);
       }
@@ -1444,7 +1444,7 @@ document.addEventListener('DOMContentLoaded', () => {
       bullets.push(new Bullet(
         x, y,
         Math.cos(ang)*spd, Math.sin(ang)*spd,
-        5, dest ? '#3f3' : '#f00', player.maxHp/15, dest
+        5, dest ? (isLight() ? '#080' : '#3f3') : '#f00', player.maxHp/15, dest
       ));
     }
   }
@@ -1875,12 +1875,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ─── Draw ─────────────────────────────────────────────────────────
-  function getThemeBg() {
-    return document.body.classList.contains('light') ? '#e8e8e8' : '#111';
-  }
-  function getThemeBorder() {
-    return document.body.classList.contains('light') ? '#aaa' : '#333';
-  }
+  function isLight() { return document.body.classList.contains('light'); }
+  function getThemeBg()     { return isLight() ? '#e8e8e8' : '#111'; }
+  function getThemeBorder() { return isLight() ? '#aaa'    : '#333'; }
+  // 텍스트/전경색: 라이트=검정, 다크=흰색
+  function getThemeFg()     { return isLight() ? '#111'    : '#fff'; }
+  // 반투명 오버레이용
+  function getThemeFgA(a)   { return isLight() ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a})`; }
 
   function drawBackground() {
     let bg = getThemeBg(), border = getThemeBorder();

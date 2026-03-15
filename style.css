@@ -114,7 +114,19 @@ body.light .skillBtn small { color: #555; }
 #gameOverScreen button { margin-top: 10px; }
 #leaderboard { margin-top: 20px; }
 
-/* ── 설정 패널 ── */
+/* ── 라이트 모드 HUD 텍스트 ── */
+body.light #ui,
+body.light #ui label,
+body.light #ui span,
+body.light #scoreContainer,
+body.light #hpBarContainer { color: #111; }
+body.light #hpBar { background: #bbb; border-color: #888; }
+body.light #hpBar > div { background: #1a9b1a; }
+body.light #bossHpBar { background: #ccc; border-color: #999; }
+body.light #bossHpBar > div { background: #cc2222; }
+body.light #warning { color: #cc0000; text-shadow: 0 0 8px rgba(200,0,0,0.3); }
+body.light #gameOverScreen { background: rgba(255,255,255,0.90); color: #111; }
+
 #settings { margin-top: 24px; display: inline-block; text-align: center; }
 #settingsContent {
   display: inline-flex;
