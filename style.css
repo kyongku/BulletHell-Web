@@ -71,7 +71,7 @@ body.light .skillBtn small { color: #555; }
 }
 /* canvas 화면 정중앙 */
 #gameCanvas {
-  background: #111;
+  background: transparent;
   display: block;
   position: fixed;
   top: 50%; left: 50%;

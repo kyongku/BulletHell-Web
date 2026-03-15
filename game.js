@@ -1875,10 +1875,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ─── Draw ─────────────────────────────────────────────────────────
+  function getThemeBg() {
+    return document.body.classList.contains('light') ? '#e8e8e8' : '#111';
+  }
+  function getThemeBorder() {
+    return document.body.classList.contains('light') ? '#aaa' : '#333';
+  }
+
   function drawBackground() {
-    let bg = '#111', border = '#333';
-    if (bossActive && boss)         { bg = boss.data.bg; border = boss.data.border; }
-    else if (warningActive && pendingBossData) { bg = pendingBossData.bg; border = pendingBossData.border; }
+    let bg = getThemeBg(), border = getThemeBorder();
+    if (bossActive && boss)                      { bg = boss.data.bg; border = boss.data.border; }
+    else if (warningActive && pendingBossData)    { bg = pendingBossData.bg; border = pendingBossData.border; }
     ctx.fillStyle = bg;
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.strokeStyle = border; ctx.lineWidth=5;
@@ -1977,7 +1984,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.save();
     ctx.fillStyle = player.color;
     ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#111';
+    ctx.fillStyle = getThemeBg();
     ctx.beginPath(); ctx.arc(player.x,player.y,player.r*0.45,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
