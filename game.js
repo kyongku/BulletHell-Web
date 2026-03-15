@@ -97,33 +97,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const elementData = {
     fire: {
       name: '화염(火)',
-      color: '#ff6b3d',     // primary color used for blending
+      color: '#ff6b3d',
       bg: '#2a0808', border: '#8b1e1e',
       burst: '#ff6b3d', spiral: '#ff9a3d', aimed: '#ff4a4a',
       size: 76, maxHp: 560,
       thresholds: { burst: 0.72, spiral: 0.40 },
-      burstInterval: 740, burstSpeed: 2.9, burstCount: 18, burstDestructRatio: 0.20,
-      spiralInterval: 46, spiralSpeed: 2.9,
-      aimedInterval: 470, aimedShots: 3, aimedDelay: 90, aimedSpeed: 3.9,
+      // 火: 공격력 2배 — bossDmg 계산 시 fireMultiplier 적용
+      fireMultiplier: 2.0,
+      burstInterval: 740, burstSpeed: 3.2, burstCount: 18, burstDestructRatio: 0.20,
+      spiralInterval: 46, spiralSpeed: 3.2,
+      aimedInterval: 470, aimedShots: 3, aimedDelay: 90, aimedSpeed: 4.2,
       orbitRadius: 135, chaseSpeed: 75, zigSpeed: 130,
       homing: 0.0, defenseMultiplier: 1.0,
-      // fire-specific: zone hazard on HP threshold
       fireZoneOnThreshold: 0.5,
+      // HP 50%: 8방향 탄환 예고 발사
+      fireVolleyOnThreshold: 0.5,
     },
     water: {
       name: '물(水)',
       color: '#4fd3ff',
       bg: '#071a2e', border: '#1b4e88',
       burst: '#4fd3ff', spiral: '#68c6ff', aimed: '#83d9ff',
-      size: 76, maxHp: 700,
+      size: 76, maxHp: 2000,  // 기존 약 3배
       thresholds: { burst: 0.70, spiral: 0.42 },
       burstInterval: 800, burstSpeed: 2.5, burstCount: 16, burstDestructRatio: 0.25,
       spiralInterval: 40, spiralSpeed: 2.7,
       aimedInterval: 520, aimedShots: 3, aimedDelay: 95, aimedSpeed: 3.65,
       orbitRadius: 115, chaseSpeed: 66, zigSpeed: 105,
       homing: 0.0, defenseMultiplier: 1.0,
-      // water-specific: totem heal phase on 50% HP
       waterHealOnThreshold: 0.5,
+      // 물 구역 내 초당 1씩 지속 HP 회복 (플레이어 감소)
+      waterFieldDrain: true,
     },
     earth: {
       name: '대지(土)',
@@ -137,7 +141,9 @@ document.addEventListener('DOMContentLoaded', () => {
       aimedInterval: 660, aimedShots: 2, aimedDelay: 120, aimedSpeed: 3.0,
       orbitRadius: 110, chaseSpeed: 55, zigSpeed: 85,
       homing: 0.0,
-      defenseMultiplier: 0.5,  // takes 50% damage — core earth trait
+      // 土: 방어율 HP 비례 30%~70%
+      defenseMultiplier: 0.5,  // base (동적 계산은 boss.hit()에서)
+      earthDynamicDefense: true,
     },
     wind: {
       name: '바람(風)',
@@ -147,13 +153,15 @@ document.addEventListener('DOMContentLoaded', () => {
       size: 72, maxHp: 780,
       thresholds: { burst: 0.68, spiral: 0.36 },
       burstInterval: 700, burstSpeed: 2.6, burstCount: 18, burstDestructRatio: 0.22,
-      spiralInterval: 30, spiralSpeed: 3.3,   // faster spiral
-      aimedInterval: 320, aimedShots: 4, aimedDelay: 65, aimedSpeed: 3.55,
-      orbitRadius: 140, chaseSpeed: 58, zigSpeed: 80,  // capped near player speed
-      homing: 0.05, defenseMultiplier: 1.0,
-      // wind-specific: laser telegraph fires every 1300ms
+      spiralInterval: 30, spiralSpeed: 3.3,
+      // 바람: 일반공격 1초마다 조준 1발
+      aimedInterval: 1000, aimedShots: 1, aimedDelay: 0, aimedSpeed: 3.8,
+      orbitRadius: 140, chaseSpeed: 58, zigSpeed: 80,
+      homing: 0.0, defenseMultiplier: 1.0,
       laserInterval: 1000,
       isWind: true,
+      // HP 50%: 미니언 대신 근접 지속피해 범위
+      windAuraOnThreshold: 0.5,
     },
     electric: {
       name: '전기(電)',
@@ -161,13 +169,17 @@ document.addEventListener('DOMContentLoaded', () => {
       bg: '#0d0d1f', border: '#4a4aaa',
       burst: '#ffe566', spiral: '#ffc533', aimed: '#ffec99',
       size: 74, maxHp: 720,
-      thresholds: { burst: 0.70, spiral: 0.42 },
-      burstInterval: 850, burstSpeed: 2.4, burstCount: 14, burstDestructRatio: 0.20,
-      spiralInterval: 44, spiralSpeed: 2.8,
-      aimedInterval: 600, aimedShots: 3, aimedDelay: 100, aimedSpeed: 3.5,
+      // 전기: 일반탄 없음 — burstInterval 엄청 크게 설정해서 사실상 비활성
+      thresholds: { burst: 0.0, spiral: 0.0 },
+      burstInterval: 999999, burstSpeed: 0, burstCount: 0, burstDestructRatio: 0,
+      spiralInterval: 999999, spiralSpeed: 0,
+      aimedInterval: 999999, aimedShots: 0, aimedDelay: 0, aimedSpeed: 0,
       orbitRadius: 120, chaseSpeed: 70, zigSpeed: 115,
       homing: 0.0, defenseMultiplier: 1.0,
-      // electric-specific: 8 orbs on field, link pulse every 2.5s
+      isElectric: true,
+      // 낙뢰: 2초마다, 꺽이는 탄: 5초마다
+      lightningInterval: 2000,
+      boltInterval: 5000,
     },
   };
 
@@ -216,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 평균 헬퍼
     const avg  = key => entries.reduce((s, e) => s + e[key], 0) / n;
     // 최대/최소 헬퍼
-    const best = key => Math.max(...entries.map(e => e[key]));
+    const best = key => Math.max(...entries.map(e => e[key] ?? 0));
     const min  = key => Math.min(...entries.map(e => e[key]));
 
     // 색상: 모든 타입 색 혼합
@@ -276,14 +288,22 @@ document.addEventListener('DOMContentLoaded', () => {
       orbitRadius: avg('orbitRadius'),
 
       homing: best('homing'),
+      fireMultiplier: hasFire ? best('fireMultiplier') : 1.0,
 
       // 土 보너스: 방어율 최소값 (가장 높은 방어)
       defenseMultiplier: hasEarth ? min('defenseMultiplier') : avg('defenseMultiplier'),
 
       // 특성 플래그 (부모 중 하나라도 있으면 상속)
-      fireZoneOnThreshold:  entries.some(e=>e.fireZoneOnThreshold)  ? 0.5 : null,
-      waterHealOnThreshold: entries.some(e=>e.waterHealOnThreshold) ? 0.5 : null,
-      laserInterval:        hasWind ? min('laserInterval') : null,
+      fireZoneOnThreshold:    entries.some(e=>e.fireZoneOnThreshold)  ? 0.5 : null,
+      fireVolleyOnThreshold:  entries.some(e=>e.fireVolleyOnThreshold)? 0.5 : null,
+      waterHealOnThreshold:   entries.some(e=>e.waterHealOnThreshold) ? 0.5 : null,
+      waterFieldDrain:        entries.some(e=>e.waterFieldDrain)      || false,
+      windAuraOnThreshold:    entries.some(e=>e.windAuraOnThreshold)  ? 0.5 : null,
+      earthDynamicDefense:    entries.some(e=>e.earthDynamicDefense)  || false,
+      fireMultiplier:         hasFire ? best('fireMultiplier') : 1.0,
+      laserInterval:          hasWind ? min('laserInterval') : null,
+      lightningInterval:      hasElec ? min('lightningInterval') : null,
+      boltInterval:           hasElec ? min('boltInterval') : null,
       isElectric: hasElec,
       isEarth:    hasEarth,
       isWind:     hasWind,
@@ -502,8 +522,10 @@ document.addEventListener('DOMContentLoaded', () => {
         cycle1BossOrder = shuffle(ALL_BOSS_TYPES);
       const type = cycle1BossOrder[bossKillCount];
       const base = elementData[type];
+      const hpTimeScale = 1.0 + bossKillCount * 0.15;  // 킬당 +15% HP
       const data = {
         ...base,
+        maxHp: (base.maxHp * hpTimeScale) | 0,
         hybridTypes: null,
         isEarth:    type === 'earth',
         isElectric: type === 'electric',
@@ -661,6 +683,22 @@ document.addEventListener('DOMContentLoaded', () => {
         this.vx += ((dx/len)*spd - this.vx) * this.homing;
         this.vy += ((dy/len)*spd - this.vy) * this.homing;
       }
+      // 꺽이는 전기탄 처리
+      if (this.bendBolt && this.bendsLeft > 0) {
+        const spd = Math.hypot(this.vx, this.vy);
+        this.distTraveled += spd * dt / FRAME_REF;
+        if (this.distTraveled >= this.bendEvery) {
+          this.distTraveled = 0;
+          this.bendsLeft--;
+          // 4방향 중 랜덤
+          const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+          const [nx,ny] = dirs[(Math.random()*4)|0];
+          this.vx = nx * spd;
+          this.vy = ny * spd;
+          this.lifeMs = 400; // 꺽일 때마다 수명 갱신
+          spawnHitEffect(this.x, this.y, '#ffe566');
+        }
+      }
       this.x += this.vx * dt / FRAME_REF;
       this.y += this.vy * dt / FRAME_REF;
       this.lifeMs -= dt;
@@ -793,9 +831,20 @@ document.addEventListener('DOMContentLoaded', () => {
       this.fireHazardUsed = false;
 
       // Wind/laser trait state
-      this.windTickMs       = 0;
-      this.windEnraged      = false;  // true after HP drops to 50%
-      this.windMinionSpawned= false;  // spawn only once
+      this.windTickMs        = 0;
+      this.windEnraged       = false;
+      this.windMinionSpawned = false;  // 바람 반피 트리거 (미니언→아우라로 변경)
+
+      // Fire trait state (volley)
+      this.fireVolleyUsed    = false;
+      this.fireVolleyQueue   = [];  // { delayMs, fired, ang }
+
+      // Electric trait timers
+      this.lightningTickMs   = 0;
+      this.boltTickMs        = 0;
+
+      // Wind aura (반피 이후 근접 지속피해)
+      this.windAuraActive    = false;
 
       // Electric trait state
       this.electricLinkTickMs = 0;
@@ -830,18 +879,12 @@ document.addEventListener('DOMContentLoaded', () => {
       // Water totem invuln: boss is invuln while waterHealActive
       if (this.waterHealActive) return;
 
-      // Wind boss: defense scales with living minion count (10% per minion)
+      // 土: HP 비례 방어율 30%~70% (낮은 HP일수록 방어 강해짐)
       let defMult = this.data.defenseMultiplier;
-      if (this.data.isWind) {
-        if (!this.windMinionSpawned) {
-          // 미니언 소환 전: 방어 없음 (defMult 1.0)
-          defMult = 1.0;
-        } else {
-          // 소환 후: 마리당 방어율 20%, 받는 데미지 = rawDmg × (1 - 마리수×0.20)
-          // 3마리=40% 데미지(60% 방어), 2마리=60%, 1마리=80%, 0마리=100%
-          const living = windMinions.filter(m => m.alive).length;
-          defMult = 1.0 - (living * 0.20);
-        }
+      if (this.data.earthDynamicDefense) {
+        const ratio = this.getRatio();
+        // ratio 1.0→0.0 일때 defMult: 0.70→0.30 (받는 피해)
+        defMult = 0.30 + ratio * 0.40;
       }
       const actualDmg = rawDmg * defMult;
       this.hp -= actualDmg;
@@ -853,12 +896,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (this.data.waterHealOnThreshold && !this.waterHealUsed && this.getRatio() <= this.data.waterHealOnThreshold) {
         this.startWaterHealing();
       }
-      // Wind enrage trigger: HP 50% → spawn minions + speed changes
+      // Wind enrage trigger: HP 50% → 이속 증가 + 근접 아우라 활성
       if (this.data.isWind && !this.windMinionSpawned && this.getRatio() <= 0.5) {
         this.windMinionSpawned = true;
         this.windEnraged       = true;
+        this.windAuraActive    = true;
         windSlowActive         = true;
-        spawnWindMinions();
         spawnShockwave(this.x, this.y, 140, '#68ffb9', 3);
       }
 
@@ -888,7 +931,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resolveWaterHealing() {
       const remain = bossCores.filter(c => c.alive).length;
-      this.hp = Math.min(this.maxHp, this.hp + remain * this.maxHp * 0.07);
+      // 토템 1개 생존당: maxHp +1, hp +10
+      this.maxHp += remain * 1;
+      this.hp = Math.min(this.maxHp, this.hp + remain * 10);
       this.waterHealActive = false;
       this.invulnMs = 0;
       bossCores = [];
@@ -929,9 +974,58 @@ document.addEventListener('DOMContentLoaded', () => {
           this.electricLinkTickMs = 0;
           triggerElectricLinks();
         }
+        // 낙뢰 타이머
+        this.lightningTickMs = (this.lightningTickMs||0) + dt;
+        if (this.lightningTickMs >= (this.data.lightningInterval||2000)) {
+          this.lightningTickMs = 0;
+          scheduleLightningStrike(this);
+        }
+        // 꺽이는 전기탄 타이머
+        this.boltTickMs = (this.boltTickMs||0) + dt;
+        if (this.boltTickMs >= (this.data.boltInterval||5000)) {
+          this.boltTickMs = 0;
+          spawnBendingBolts(this, bossDmg);
+        }
       }
 
-      const bossDmg = player.maxHp / 15;
+      // 불 volley 대기열 처리
+      for (const v of this.fireVolleyQueue) {
+        if (v.fired) continue;
+        v.delayMs -= dt;
+        if (v.delayMs <= 0) {
+          v.fired = true;
+          for (let i = 0; i < 8; i++) {
+            const a = (Math.PI*2*i)/8 + v.ang;
+            bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a)*4.5, Math.sin(a)*4.5,
+              6, '#ff4a4a', bossDmg*1.2, false));
+          }
+          spawnShockwave(this.x, this.y, 80, '#ff4a4a', 2);
+        }
+      }
+      this.fireVolleyQueue = this.fireVolleyQueue.filter(v => !v.fired || v.delayMs > -500);
+
+      // 바람 아우라 근접 지속 피해
+      if (this.windAuraActive) {
+        const auraDist = this.size * 2;
+        if (Math.hypot(player.x - this.x, player.y - this.y) < auraDist + player.r) {
+          applyPlayerHit(bossDmg * 0.06 * dt / FRAME_REF, this.x, this.y);
+        }
+      }
+
+      // 물 구역 체력 드레인 (초당 1)
+      if (this.data.waterFieldDrain && bossActive) {
+        this._waterDrainMs = (this._waterDrainMs||0) + dt;
+        if (this._waterDrainMs >= 1000) {
+          this._waterDrainMs -= 1000;
+          applyPlayerHit(1, this.x, this.y);
+        }
+      }
+
+      // 보스별 기본 데미지 (시간 경과 배율 포함)
+      const timeDmgScale = 1.0 + score / 8000;  // 스코어 8000마다 +100%
+      const fireMult = this.data.fireMultiplier || 1.0;
+      const bossDmg = (player.maxHp / 15) * fireMult * timeDmgScale;
 
       if (this.phase === 'burst') {
         this.x = this.baseX + Math.cos(this.moveAngle * 0.6) * this.data.orbitRadius;
@@ -1283,7 +1377,113 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function drawWindAura() {
+    if (!boss) return;
+    const r = boss.size * 2;
+    const pulse = 0.3 + 0.2 * Math.sin(performance.now()/200);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#68ffb9';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(boss.x, boss.y, r, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = pulse * 0.15;
+    ctx.fillStyle = '#68ffb9';
+    ctx.beginPath(); ctx.arc(boss.x, boss.y, r, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
   // ─── Electric orbs ────────────────────────────────────────────────
+  // ─── Fire 8방향 예고 발사 ────────────────────────────────────────
+  function scheduleFireVolley(bossRef) {
+    // 0.5초 궤적 예고 후 8방향 발사
+    // 예고: windTelegraph 스타일로 8방향 선 그리기
+    const ang = Math.atan2(player.y - bossRef.y, player.x - bossRef.x);
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI*2*i)/8;
+      windTelegraphs.push({
+        x1: bossRef.x, y1: bossRef.y,
+        x2: bossRef.x + Math.cos(a)*600,
+        y2: bossRef.y + Math.sin(a)*600,
+        ang: a, delayMs: 500, life: 700, maxLife: 700, fired: false,
+        isFireVolley: true,
+      });
+    }
+    bossRef.fireVolleyQueue.push({ delayMs: 500, fired: false, ang: 0 });
+  }
+
+  // ─── Electric 낙뢰 ────────────────────────────────────────────────
+  let lightningStrikes = [];  // { x, telegraphMs, fired, life }
+
+  function scheduleLightningStrike(bossRef) {
+    // 플레이어 위치 + 약간 랜덤 편차로 낙뢰 4발 (0.1초 간격)
+    const dmg = (player.maxHp / 15) * (1.0 + score / 8000);
+    for (let i = 0; i < 4; i++) {
+      const offsetX = (Math.random()-0.5)*80;
+      const tx = clamp(player.x + offsetX, 30, canvas.width-30);
+      lightningStrikes.push({
+        x: tx,
+        telegraphMs: 300,   // 예고 시간
+        fireDelay: i*100,   // 0, 100, 200, 300ms 간격
+        fired: false,
+        life: 400,
+        dmg,
+      });
+    }
+  }
+
+  function updateLightningStrikes(dt) {
+    if (!bossActive || !boss || !boss.data.isElectric) { lightningStrikes=[]; return; }
+    for (const s of lightningStrikes) {
+      s.telegraphMs -= dt;
+      s.fireDelay   -= dt;
+      if (!s.fired && s.fireDelay <= 0) {
+        s.fired = true;
+        // 위에서 아래로 탄 (vx=0, vy=큰값, lifeMs로 거리 조절)
+        bullets.push(new Bullet(s.x, -10,
+          0, 9.5,
+          7, '#ffe566', s.dmg, false, { lifeMs: 900 }));
+        spawnShockwave(s.x, canvas.height*0.1, 20, '#ffe566', 1.5);
+      }
+      s.life -= dt;
+    }
+    lightningStrikes = lightningStrikes.filter(s => s.life > 0);
+  }
+
+  function drawLightningStrikes() {
+    for (const s of lightningStrikes) {
+      if (s.fired) continue;
+      const alpha = Math.max(0, 0.7 * (1 - s.telegraphMs/300) + 0.15);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffe566';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(s.x, 0);
+      ctx.lineTo(s.x, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
+  // ─── Electric 꺽이는 전기탄 ──────────────────────────────────────
+  // BendingBolt: 일정 거리 후 무작위 방향으로 꺽임, 8회 반복
+  function spawnBendingBolts(bossRef, dmg) {
+    const dirs = [
+      {vx:0,vy:-1},{vx:1,vy:0},{vx:0,vy:1},{vx:-1,vy:0}
+    ];
+    for (const d of dirs) {
+      const spd = 5.5;
+      bullets.push(new Bullet(
+        bossRef.x, bossRef.y,
+        d.vx*spd, d.vy*spd,
+        6, '#ffe566', dmg, false,
+        { lifeMs: 400, bendBolt: true, bendsLeft: 8, distTraveled: 0, bendEvery: 90 }
+      ));
+    }
+  }
+
   function initElectricOrbs() {
     electricOrbs = [];
     electricLinks = [];
@@ -1614,6 +1814,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bossCores=[];fireZones=[];earthWalls=null;windTelegraphs=[];
     electricOrbs=[];electricLinks=[];
     windMinions=[];windSlowActive=false;
+    lightningStrikes=[];
     score=0;gameOver=false;isPaused=false;
     if (pauseScreen) pauseScreen.style.display='none';
     spawnIntervalMs=NORMAL_SPAWN_START;spawnTimerMs=0;difficultyTimerMs=0;
@@ -1783,6 +1984,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fireZones=[]; earthWalls=null; windTelegraphs=[];
         electricOrbs=[]; electricLinks=[];
         windMinions=[]; windSlowActive=false;
+        lightningStrikes=[];
         bullets=[];
         if (bossUi) bossUi.style.display='none';
       }
@@ -1796,6 +1998,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateWindTelegraphs(dt);
     updateElectricOrbs(dt);
     updateWindMinions(dt);
+    updateLightningStrikes(dt);
 
     updateStatToast(dt);
 
@@ -1962,6 +2165,8 @@ document.addEventListener('DOMContentLoaded', () => {
     drawWindTelegraphs();
     drawElectricOrbs();
     drawWindMinions();
+    drawLightningStrikes();
+    if (boss && boss.windAuraActive) drawWindAura();
     drawStatToast();
     healthPacks.forEach(h=>h.draw());
     bossCores.forEach(c=>c.draw());
