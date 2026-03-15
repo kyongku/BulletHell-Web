@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const canvas          = $('gameCanvas');
   const warningDiv      = $('warning');
   const gameOverScreen  = $('gameOverScreen');
+  const pauseScreen     = $('pauseScreen');
   const finalScoreSpan  = $('finalScore');
   const boardList       = $('boardList');
   const scoreSpan       = $('score');
@@ -337,6 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let score              = 0;
   let gameOver           = false;
+  let isPaused           = false;
   let spawnIntervalMs    = NORMAL_SPAWN_START;
   let spawnTimerMs       = 0;
   let difficultyTimerMs  = 0;
@@ -1607,7 +1609,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bossCores=[];fireZones=[];earthWalls=null;windTelegraphs=[];
     electricOrbs=[];electricLinks=[];
     windMinions=[];windSlowActive=false;
-    score=0;gameOver=false;
+    score=0;gameOver=false;isPaused=false;
+    if (pauseScreen) pauseScreen.style.display='none';
     spawnIntervalMs=NORMAL_SPAWN_START;spawnTimerMs=0;difficultyTimerMs=0;
     bossKillCount=0;cycle1BossOrder=[];cycle2Queue=[];cycle3Queue=[];
     bossActive=false;boss=null;
@@ -1984,13 +1987,27 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!lastTime) lastTime = time;
     const dt = Math.min(50, time-lastTime);
     lastTime = time;
-    update(dt);
+    if (!isPaused) update(dt);
     draw();
     if (!gameOver) requestAnimationFrame(loop);
   }
 
+  function togglePause() {
+    if (gameOver) return;
+    isPaused = !isPaused;
+    if (pauseScreen) pauseScreen.style.display = isPaused ? 'flex' : 'none';
+    if (!isPaused) lastTime = performance.now(); // dt 튀는 거 방지
+  }
+
   // ─── Input ───────────────────────────────────────────────────────
   window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      // 메뉴/게임오버 화면에선 무시
+      if (canvas.style.display !== 'none') togglePause();
+      return;
+    }
+    if (isPaused) return; // 일시정지 중 다른 키 무시
     keys[e.key] = true;
     if (e.key===' ') e.preventDefault();
     if (e.key==='f' || e.key==='F') {
@@ -1998,13 +2015,12 @@ document.addEventListener('DOMContentLoaded', () => {
       useSkill(getSelectedSkill());
     }
   });
-  window.addEventListener('keyup', e => { keys[e.key]=false; });
+  window.addEventListener('keyup', e => { if (!isPaused) keys[e.key]=false; else keys={}; });
   // 포커스 이탈 시 모든 키 상태 초기화 (WASD 고착 방지)
   window.addEventListener('blur', () => { keys = {}; });
 
   function getCanvasMouse(e) {
     const r = canvas.getBoundingClientRect();
-    // CSS 스케일링 보정: canvas 내부 해상도 기준 좌표로 변환
     const scaleX = canvas.width  / r.width;
     const scaleY = canvas.height / r.height;
     return {
@@ -2013,25 +2029,26 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  canvas.addEventListener('mousemove', e => {
+  // window 레벨로 등록 — canvas 밖(크롬 창 안)에서도 마우스 인식
+  window.addEventListener('mousemove', e => {
     const m = getCanvasMouse(e);
     mouseX = m.x; mouseY = m.y;
   });
-  canvas.addEventListener('mousedown', e => {
-    if (gameOver) return;
+  window.addEventListener('mousedown', e => {
+    if (gameOver || isPaused) return;
+    if (canvas.style.display === 'none') return; // 메뉴에선 무시
     const m = getCanvasMouse(e);
     mouseX = m.x; mouseY = m.y;
     if (e.button===0) { isMouseDown=true; firePlayerBullet(mouseX,mouseY); }
     if (e.button===2) useSkill(getSelectedSkill());
   });
-  canvas.addEventListener('mouseup', e => {
+  window.addEventListener('mouseup', e => {
     if (e.button===0) isMouseDown=false;
   });
-  // 캔버스 밖으로 나가도 해제
-  canvas.addEventListener('mouseleave', () => { isMouseDown=false; });
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); });
 
   btnStart?.addEventListener('click', () => { initGame(); requestAnimationFrame(loop); });
+  $('btnResume')?.addEventListener('click', () => { if (isPaused) togglePause(); });
   btnRetry?.addEventListener('click', () => {
     if (menu)           menu.style.display='block';
     if (ui)             ui.style.display='none';
