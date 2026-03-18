@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const POWERUP_DURATION     = 5000;
   const POWERUP_SPEED_MULT   = 1.15;
   const POWERUP_FIRE_CD      = 100;
-  const BOSS_SCORE_INTERVAL  = 3000;   // every 300 pts a boss spawns (테스트용)
+  const BOSS_SCORE_INTERVAL  = 300;   // every 300 pts a boss spawns (테스트용)
   const ELECTRIC_BALL_COUNT  = 8;      // number of electric orbs on field
   const ELECTRIC_LINK_INTERVAL = 2500; // ms between link pulses
   const PARRY_WINDOW_START   = 100;    // ms after cast when parry window opens
@@ -340,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── Skill definitions ───────────────────────────────────────────
   const SKILLS = [
-    { id: 'teleport',  name: '공간도약', desc: '마우스 방향 순간이동',           cooldown: 6000  },
+    { id: 'teleport',  name: '공간도약', desc: '이동키/마우스 방향 순간이동',     cooldown: 6000  },
     { id: 'fluid',     name: '유체화',   desc: '3s 피해 50% 감소',               cooldown: 12000 },
     { id: 'overcharge',name: '과부하',   desc: '4s 데미지 2배',                  cooldown: 14000 },
     { id: 'parry',     name: '패링',     desc: '0.1s 후 피격 시 쿨타임 90% 감소 + 주변 탄 제거', cooldown: 5000  },
@@ -1800,13 +1800,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (skillId === 'teleport') {
       const TELEPORT_RANGE = 220;
-      const dx = mouseX - player.x, dy = mouseY - player.y;
-      const mouseDist = Math.hypot(dx, dy) || 1;
-      // 사거리 내면 마우스 위치로, 밖이면 방향만 따라 최대 사거리까지
-      const actualDist = Math.min(mouseDist, TELEPORT_RANGE);
-      const nx = dx / mouseDist, ny = dy / mouseDist;
-      player.x = clamp(player.x + nx * actualDist, player.r, canvas.width  - player.r);
-      player.y = clamp(player.y + ny * actualDist, player.r, canvas.height - player.r);
+      // 키보드 방향 입력 확인 (WASD 또는 화살표)
+      const kx = (keys['d']||keys['ArrowRight'] ? 1 : 0) - (keys['a']||keys['ArrowLeft'] ? 1 : 0);
+      const ky = (keys['s']||keys['ArrowDown']  ? 1 : 0) - (keys['w']||keys['ArrowUp']   ? 1 : 0);
+      let nx, ny;
+      if (kx !== 0 || ky !== 0) {
+        // 키보드 방향으로 텔포
+        const klen = Math.hypot(kx, ky);
+        nx = kx / klen; ny = ky / klen;
+        player.x = clamp(player.x + nx * TELEPORT_RANGE, player.r, canvas.width  - player.r);
+        player.y = clamp(player.y + ny * TELEPORT_RANGE, player.r, canvas.height - player.r);
+      } else {
+        // 마우스 방향으로 텔포
+        const dx = mouseX - player.x, dy = mouseY - player.y;
+        const mouseDist = Math.hypot(dx, dy) || 1;
+        const actualDist = Math.min(mouseDist, TELEPORT_RANGE);
+        nx = dx / mouseDist; ny = dy / mouseDist;
+        player.x = clamp(player.x + nx * actualDist, player.r, canvas.width  - player.r);
+        player.y = clamp(player.y + ny * actualDist, player.r, canvas.height - player.r);
+      }
       dashTrailMs = 200;
       spawnShockwave(player.x, player.y, 50, '#9ff', 1.5);
       return;
