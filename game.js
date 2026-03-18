@@ -50,6 +50,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
+
+  // ─── BGM / SFX ───────────────────────────────────────────────────
+  let sfxVolume = 0.5;  // spawnHitEffect 등 효과음 볼륨 (0~1)
+  const bgmTitle  = document.getElementById('bgmTitle');
+  const bgmIngame = document.getElementById('bgmIngame');
+
+  function getBgmVol() { return parseFloat(localStorage.getItem('vol_bgm') ?? '0.5'); }
+  function getSfxVol() { return parseFloat(localStorage.getItem('vol_sfx') ?? '0.5'); }
+
+  function playTitle() {
+    if (!bgmTitle) return;
+    bgmIngame?.pause();
+    bgmIngame && (bgmIngame.currentTime = 0);
+    bgmTitle.volume = getBgmVol();
+    bgmTitle.play().catch(()=>{});
+  }
+  function playIngame() {
+    if (!bgmIngame) return;
+    bgmTitle?.pause();
+    bgmTitle && (bgmTitle.currentTime = 0);
+    bgmIngame.volume = getBgmVol();
+    bgmIngame.play().catch(()=>{});
+  }
+  function stopAll() {
+    bgmTitle?.pause();
+    bgmIngame?.pause();
+  }
   canvas.width  = 1200;
   canvas.height = 720;
 
@@ -84,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const POWERUP_DURATION     = 5000;
   const POWERUP_SPEED_MULT   = 1.15;
   const POWERUP_FIRE_CD      = 100;
-  const BOSS_SCORE_INTERVAL  = 3000;   // every 3000 pts a boss spawns
+  const BOSS_SCORE_INTERVAL  = 300;   // every 300 pts a boss spawns (테스트용)
   const ELECTRIC_BALL_COUNT  = 8;      // number of electric orbs on field
   const ELECTRIC_LINK_INTERVAL = 2500; // ms between link pulses
   const PARRY_WINDOW_START   = 100;    // ms after cast when parry window opens
@@ -1050,8 +1077,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       } else {
         // aimed phase
-        const futX = player.x + ((keys['d']||keys['ArrowRight'])?50:0) - ((keys['a']||keys['ArrowLeft'])?50:0);
-        const futY = player.y + ((keys['s']||keys['ArrowDown']) ?35:0) - ((keys['w']||keys['ArrowUp'])  ?35:0);
+        const futX = player.x + (keys['ArrowRight']?50:0) - (keys['ArrowLeft']?50:0);
+        const futY = player.y + (keys['ArrowDown'] ?35:0) - (keys['ArrowUp']  ?35:0);
         const dx = futX - this.x, dy = futY - this.y;
         const len = Math.hypot(dx,dy) || 1;
         this.x += (dx/len)*this.data.zigSpeed*(this._speedBoost||1)*dt/1000 + Math.sin(this.moveAngle*5)*55*dt/1000;
@@ -1895,6 +1922,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── Game init / over ─────────────────────────────────────────────
   function initGame() {
+    playIngame();
     player = {
       x: canvas.width*0.25, y: canvas.height*0.5,
       r: 7, speed: PLAYER_BASE_SPEED,
@@ -1937,6 +1965,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function doGameOver() {
     gameOver=true;
+    playTitle();
     if (gameOverScreen) gameOverScreen.style.display='flex';
     if (finalScoreSpan) finalScoreSpan.textContent=String(score|0);
     if (submitBtn) { submitBtn.disabled=false; submitBtn.textContent='점수 제출'; }
@@ -2005,14 +2034,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 이속 보너스: player.speed(기본값) + speedBonus 적용
     const effectiveSpeed = (PLAYER_BASE_SPEED + playerStats.speedBonus) * speedMult;
     const move = effectiveSpeed * dt / FRAME_REF;
-    if (keys['ArrowLeft'] ||keys['a']) player.x -= move;
-    if (keys['ArrowRight']||keys['d']) player.x += move;
-    if (keys['ArrowUp']   ||keys['w']) player.y -= move;
-    if (keys['ArrowDown'] ||keys['s']) player.y += move;
+    if (keys['ArrowLeft'])  player.x -= move;
+    if (keys['ArrowRight']) player.x += move;
+    if (keys['ArrowUp'])    player.y -= move;
+    if (keys['ArrowDown'])  player.y += move;
     player.x = clamp(player.x, player.r, canvas.width -player.r);
     player.y = clamp(player.y, player.r, canvas.height-player.r);
 
-    if (keys[' '] || isMouseDown) firePlayerBullet(mouseX, mouseY);
+    // WASD: 해당 방향으로 발사 (키보드 전용 공격)
+    const wasdFireX = player.x + ((keys['d']?1:0) - (keys['a']?1:0)) * 999;
+    const wasdFireY = player.y + ((keys['s']?1:0) - (keys['w']?1:0)) * 999;
+    const wasdFiring = keys['w'] || keys['a'] || keys['s'] || keys['d'];
+    if (wasdFiring) firePlayerBullet(wasdFireX, wasdFireY);
+    else if (keys[' '] || isMouseDown) firePlayerBullet(mouseX, mouseY);
 
     // Normal bullet spawner (only outside boss fights)
     spawnTimerMs += dt;
@@ -2457,12 +2491,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnStart?.addEventListener('click', () => { initGame(); requestAnimationFrame(loop); });
   $('btnResume')?.addEventListener('click', () => { if (isPaused) togglePause(); });
+
+  // 볼륨 슬라이더 초기값 + 이벤트
+  const sliderBgm = $('sliderBgm');
+  const sliderSfx = $('sliderSfx');
+  const valBgm    = $('valBgm');
+  const valSfx    = $('valSfx');
+
+  function initVolumeSliders() {
+    const bgmVol = Math.round(getBgmVol() * 100);
+    const sfxVol = Math.round(getSfxVol() * 100);
+    if (sliderBgm) { sliderBgm.value = bgmVol; }
+    if (valBgm)    { valBgm.textContent = bgmVol; }
+    if (sliderSfx) { sliderSfx.value = sfxVol; }
+    if (valSfx)    { valSfx.textContent = sfxVol; }
+    sfxVolume = getSfxVol();
+  }
+  initVolumeSliders();
+
+  sliderBgm?.addEventListener('input', () => {
+    const v = sliderBgm.value / 100;
+    localStorage.setItem('vol_bgm', String(v));
+    if (valBgm) valBgm.textContent = sliderBgm.value;
+    if (bgmTitle)  bgmTitle.volume  = v;
+    if (bgmIngame) bgmIngame.volume = v;
+  });
+  sliderSfx?.addEventListener('input', () => {
+    const v = sliderSfx.value / 100;
+    localStorage.setItem('vol_sfx', String(v));
+    if (valSfx) valSfx.textContent = sliderSfx.value;
+    sfxVolume = v;
+  });
   btnRetry?.addEventListener('click', () => {
     if (menu)           menu.style.display='block';
     if (ui)             ui.style.display='none';
     canvas.style.display='none';
     if (gameOverScreen) gameOverScreen.style.display='none';
     gameOver=false;
+    playTitle();
   });
   submitBtn?.addEventListener('click', handleSubmit);
 
@@ -2470,4 +2536,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (ui)             ui.style.display='none';
   canvas.style.display='none';
   if (gameOverScreen) gameOverScreen.style.display='none';
+  // 첫 클릭 시 타이틀 BGM 시작 (autoplay 정책 대응)
+  document.addEventListener('click', () => playTitle(), { once: true });
 });
