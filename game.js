@@ -1803,22 +1803,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // 키보드 방향 입력 확인 (WASD 또는 화살표)
       const kx = (keys['d']||keys['ArrowRight'] ? 1 : 0) - (keys['a']||keys['ArrowLeft'] ? 1 : 0);
       const ky = (keys['s']||keys['ArrowDown']  ? 1 : 0) - (keys['w']||keys['ArrowUp']   ? 1 : 0);
-      let nx, ny;
-      if (kx !== 0 || ky !== 0) {
-        // 키보드 방향으로 텔포
-        const klen = Math.hypot(kx, ky);
-        nx = kx / klen; ny = ky / klen;
-        player.x = clamp(player.x + nx * TELEPORT_RANGE, player.r, canvas.width  - player.r);
-        player.y = clamp(player.y + ny * TELEPORT_RANGE, player.r, canvas.height - player.r);
-      } else {
-        // 마우스 방향으로 텔포
-        const dx = mouseX - player.x, dy = mouseY - player.y;
-        const mouseDist = Math.hypot(dx, dy) || 1;
-        const actualDist = Math.min(mouseDist, TELEPORT_RANGE);
-        nx = dx / mouseDist; ny = dy / mouseDist;
-        player.x = clamp(player.x + nx * actualDist, player.r, canvas.width  - player.r);
-        player.y = clamp(player.y + ny * actualDist, player.r, canvas.height - player.r);
-      }
+      if (kx === 0 && ky === 0) { skillCooldowns[skillId] = 0; return; } // 방향 없으면 쿨 소모 없이 취소
+      const klen = Math.hypot(kx, ky);
+      const nx = kx / klen, ny = ky / klen;
+      player.x = clamp(player.x + nx * TELEPORT_RANGE, player.r, canvas.width  - player.r);
+      player.y = clamp(player.y + ny * TELEPORT_RANGE, player.r, canvas.height - player.r);
       dashTrailMs = 200;
       spawnShockwave(player.x, player.y, 50, '#9ff', 1.5);
       return;
