@@ -986,12 +986,12 @@ document.addEventListener('DOMContentLoaded', () => {
       this.updatePhase();
       // Wind enrage: boost boss movement multiplier after trigger
       this._speedBoost = (this.data.isWind && this.windEnraged) ? 1.20 : 1.0;
-      this.moveAngle  += dt / 1000;
-      this.fireTickMs += dt;
+      this.moveAngle  += dt * bulletTimeScale / 1000;
+      this.fireTickMs += dt * bulletTimeScale;
 
       const hasLaser = this.data.laserInterval != null;
       if (hasLaser) {
-        this.windTickMs += dt;
+        this.windTickMs += dt * bulletTimeScale;
         if (this.windTickMs >= this.data.laserInterval) {
           this.windTickMs = 0;
           queueWindTelegraph(this);
@@ -1005,13 +1005,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const hasElectric = this.data.isElectric;
       if (hasElectric) {
-        this.electricLinkTickMs += dt;
+        this.electricLinkTickMs += dt * bulletTimeScale;
         if (this.electricLinkTickMs >= ELECTRIC_LINK_INTERVAL) {
           this.electricLinkTickMs = 0;
           triggerElectricLinks();
         }
         // 낙뢰 타이머
-        this.lightningTickMs = (this.lightningTickMs||0) + dt;
+        this.lightningTickMs = (this.lightningTickMs||0) + dt * bulletTimeScale;
         if (this.lightningTickMs >= (this.data.lightningInterval||2000)) {
           this.lightningTickMs = 0;
           scheduleLightningStrike(this);
@@ -1090,10 +1090,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       } else {
         // aimed phase
-        const _mL = (_keyMode==='wasd_move') ? (keys['a']||keys['ArrowLeft'])  : keys['ArrowLeft'];
-        const _mR = (_keyMode==='wasd_move') ? (keys['d']||keys['ArrowRight']) : keys['ArrowRight'];
-        const _mU = (_keyMode==='wasd_move') ? (keys['w']||keys['ArrowUp'])    : keys['ArrowUp'];
-        const _mD = (_keyMode==='wasd_move') ? (keys['s']||keys['ArrowDown'])  : keys['ArrowDown'];
+        const _mL = (_keyMode==='wasd_move') ? keys['a'] : keys['ArrowLeft'];
+        const _mR = (_keyMode==='wasd_move') ? keys['d'] : keys['ArrowRight'];
+        const _mU = (_keyMode==='wasd_move') ? keys['w'] : keys['ArrowUp'];
+        const _mD = (_keyMode==='wasd_move') ? keys['s'] : keys['ArrowDown'];
         const futX = player.x + (_mR?50:0) - (_mL?50:0);
         const futY = player.y + (_mD?35:0) - (_mU?35:0);
         const dx = futX - this.x, dy = futY - this.y;
@@ -1109,7 +1109,7 @@ document.addEventListener('DOMContentLoaded', () => {
           this.burstTickMs = 0;
         }
         if (this.burstQueue > 0) {
-          this.burstTickMs += dt;
+          this.burstTickMs += dt * bulletTimeScale;
           if (this.burstTickMs >= this.data.aimedDelay) {
             this.burstTickMs = 0;
             this.burstQueue--;
@@ -1345,7 +1345,7 @@ document.addEventListener('DOMContentLoaded', () => {
       m.y += (targetY - m.y) * 0.06;
 
       // 플레이어에게 조준 발사
-      m.fireTickMs -= dt;
+      m.fireTickMs -= dt * bulletTimeScale;
       if (m.fireTickMs <= 0) {
         m.fireTickMs = 1400;
         const dx = player.x - m.x, dy = player.y - m.y;
@@ -1815,10 +1815,10 @@ document.addEventListener('DOMContentLoaded', () => {
         player.y = clamp(player.y + (dy/dist)*actualDist, player.r, canvas.height - player.r);
       } else {
         // F키: 이동키 방향으로 텔포, 방향키 없으면 취소
-        const _tpL = (_keyMode==='wasd_move') ? (keys['a']||keys['ArrowLeft'])  : keys['ArrowLeft'];
-        const _tpR = (_keyMode==='wasd_move') ? (keys['d']||keys['ArrowRight']) : keys['ArrowRight'];
-        const _tpU = (_keyMode==='wasd_move') ? (keys['w']||keys['ArrowUp'])    : keys['ArrowUp'];
-        const _tpD = (_keyMode==='wasd_move') ? (keys['s']||keys['ArrowDown'])  : keys['ArrowDown'];
+        const _tpL = (_keyMode==='wasd_move') ? keys['a'] : keys['ArrowLeft'];
+        const _tpR = (_keyMode==='wasd_move') ? keys['d'] : keys['ArrowRight'];
+        const _tpU = (_keyMode==='wasd_move') ? keys['w'] : keys['ArrowUp'];
+        const _tpD = (_keyMode==='wasd_move') ? keys['s'] : keys['ArrowDown'];
         const kx = (_tpR?1:0) - (_tpL?1:0);
         const ky = (_tpD?1:0) - (_tpU?1:0);
         if (kx === 0 && ky === 0) { skillCooldowns[skillId] = 0; return; }
@@ -2069,10 +2069,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const wasdIsMove = (_keyMode === 'wasd_move');
 
     // 이동 키
-    const moveLeft  = wasdIsMove ? (keys['a']||keys['ArrowLeft'])  : keys['ArrowLeft'];
-    const moveRight = wasdIsMove ? (keys['d']||keys['ArrowRight']) : keys['ArrowRight'];
-    const moveUp    = wasdIsMove ? (keys['w']||keys['ArrowUp'])    : keys['ArrowUp'];
-    const moveDown  = wasdIsMove ? (keys['s']||keys['ArrowDown'])  : keys['ArrowDown'];
+    const moveLeft  = wasdIsMove ? keys['a']           : keys['ArrowLeft'];
+    const moveRight = wasdIsMove ? keys['d']           : keys['ArrowRight'];
+    const moveUp    = wasdIsMove ? keys['w']           : keys['ArrowUp'];
+    const moveDown  = wasdIsMove ? keys['s']           : keys['ArrowDown'];
     if (moveLeft)  player.x -= move;
     if (moveRight) player.x += move;
     if (moveUp)    player.y -= move;
